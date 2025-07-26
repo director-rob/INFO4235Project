@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Three.js Collectible Cube Game with Header</title>
+  <style>
+    /* Reset and base */
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #111;
+      font-family: Arial, sans-serif;
+      color: white;
+    }
+
+    /* Header styles */
+    header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      background: #222;
+      padding: 12px 24px;
+      box-sizing: border-box;
+      z-index: 10;
+      user-select: none;
+    }
+
+    nav ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      gap: 24px;
+    }
+
+    nav ul li a {
+      color: white;
+      text-decoration: none;
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    nav ul li a:hover {
+      text-decoration: underline;
+    }
+
+    /* Score */
+    #score {
+      position: fixed;
+      top: 60px; /* below header */
+      left: 20px;
+      font-size: 22px;
+      z-index: 10;
+      user-select: none;
+    }
+
+    /* Canvas fills the viewport */
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      margin-top: 80px; /* leave space for header + score */
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <ul>
+        <li><a href="#">Home</a></li>
+        <li><a href="#">About</a></li>
+        <li><a href="#">Contact Us</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <div id="score">Score: 0</div>
+  <canvas id="three-canvas"></canvas>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
