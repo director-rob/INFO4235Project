@@ -9,8 +9,8 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   1000
 );
+// Initial camera position - will be updated to follow player
 camera.position.set(0, 5, 10);
-camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({
   canvas: document.getElementById('three-canvas'),
@@ -164,7 +164,7 @@ function spawnWave(waveNum) {
   const count = baseCount * waveNum;
 
   for (let i = 0; i < count; i++) {
-    const geo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+    const geo = new THREE.BoxGeometry(2, 0.5, 1); // wider rectangle: width=2, height=0.5, depth=1
     const mat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
     const collectible = new THREE.Mesh(geo, mat);
 
@@ -282,6 +282,11 @@ function animate(time = 0) {
   if (keys.s) playerCube.position.z += speed;
   if (keys.a) playerCube.position.x -= speed;
   if (keys.d) playerCube.position.x += speed;
+
+  // Update camera to follow player from 45-degree angle
+  const cameraOffset = new THREE.Vector3(5, 8, 5); // offset from player (x, y, z)
+  camera.position.copy(playerCube.position).add(cameraOffset);
+  camera.lookAt(playerCube.position);
 
   // Spin player cube
   playerCube.rotation.x += 0.01;
