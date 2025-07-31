@@ -1,16 +1,15 @@
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+// main.js
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x111111);
+const loader = new THREE.TextureLoader();
+loader.load('sky.jpg', (texture) => {
+  scene.background = texture;
+});
 
-const camera = new THREE.PerspectiveCamera(
-  75,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  1000
-);
-// Initial camera position - will be updated to follow player
-camera.position.set(0, 5, 10);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 5, 15);
 
 const renderer = new THREE.WebGLRenderer({
   canvas: document.getElementById('three-canvas'),
@@ -19,16 +18,6 @@ const renderer = new THREE.WebGLRenderer({
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 
-const skyGeometry = new THREE.SphereGeometry(100, 32, 32);
-const skyMaterial = new THREE.MeshBasicMaterial({ 
-  color: 0x87ceeb, // light blue sky color
-  side: THREE.BackSide // render inside of the sphere
-});
-
-const skyDome = new THREE.Mesh(skyGeometry, skyMaterial);
-scene.add(skyDome);
-
-// Lights
 const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
 directionalLight.position.set(5, 10, 7);
 scene.add(directionalLight);
@@ -36,22 +25,44 @@ scene.add(directionalLight);
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
 scene.add(ambientLight);
 
-// Ground plane
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(20, 20),
-  new THREE.MeshStandardMaterial({ color: 0x222222 })
+  new THREE.MeshStandardMaterial({ color: 0x1C7AFF })
 );
 ground.rotation.x = -Math.PI / 2;
 scene.add(ground);
 
-// Player cube
 const playerGeometry = new THREE.BoxGeometry(1, 1, 1);
 const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
 const playerCube = new THREE.Mesh(playerGeometry, playerMaterial);
-playerCube.position.y = 0.5; // sit on ground
+playerCube.position.y = 0.5;
 scene.add(playerCube);
 
-// WASD movement tracking
+let playerModel = null;
+let bombModel = null;
+
+const gltfLoader = new GLTFLoader();
+const bombLoader = new GLTFLoader();
+gltfLoader.load('car/scene.gltf', (gltf) => {
+  playerModel = gltf.scene;
+  playerModel.scale.set(0.7, 0.7, 0.7);
+  playerModel.position.set(0, 0, 0);
+  scene.add(playerModel);
+  scene.remove(playerCube);
+});
+
+bombLoader.load('bomb/scene.gltf', (gltf) => {
+  bombModel = gltf.scene;
+  //bombModel.rotation.set(Math.PI, 0, 0);
+  bombModel.scale.set(0.01, 0.01, 0.01);
+  bombModel.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+});
+
 const keys = { w: false, a: false, s: false, d: false };
 window.addEventListener('keydown', (e) => {
   if (e.key in keys) keys[e.key] = true;
@@ -60,94 +71,53 @@ window.addEventListener('keyup', (e) => {
   if (e.key in keys) keys[e.key] = false;
 });
 
-
-// Score display
 const scoreDiv = document.getElementById('score');
 let score = 0;
 let waveNumber = 1;
 
-// Collectibles (red cubes)
-let collectibles = [];
-
-// Obstacles (falling cones)
-let cones = [];
-const coneFallSpeed = 0.25;  // faster falling cones
-const coneSpawnInterval = 300; // ms
-
-// Game state
+let collectibles = [], cones = [], bombs = [];
+const coneFallSpeed = 0.25;
+const coneSpawnInterval = 200;
 let gameOver = false;
 
-// Cone geometry and material (reuse for performance)
 const coneGeometry = new THREE.ConeGeometry(0.3, 1, 8);
 const coneMaterial = new THREE.MeshStandardMaterial({ color: 0xffa500 });
 
-// Explosion particles
 const explosionParticles = [];
-const explosionDuration = 1000; // ms
+const explosionDuration = 1000;
 let explosionStartTime = 0;
-
-// Global div for game over text
 let gameOverDiv = null;
 
-// Show game over text function
 function showGameOver() {
-  if (gameOverDiv) return; // already shown
-
+  if (gameOverDiv) return;
   gameOverDiv = document.createElement('div');
-  gameOverDiv.style.position = 'fixed';
-  gameOverDiv.style.top = '50%';
-  gameOverDiv.style.left = '50%';
-  gameOverDiv.style.transform = 'translate(-50%, -50%)';
-  gameOverDiv.style.color = 'red';
-  gameOverDiv.style.fontSize = '36px';
-  gameOverDiv.style.fontWeight = 'bold';
-  gameOverDiv.style.userSelect = 'none';
-  gameOverDiv.style.textAlign = 'center';
+  gameOverDiv.style = `position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: red; font-size: 36px; font-weight: bold; user-select: none; text-align: center;`;
   gameOverDiv.innerHTML = 'GAME OVER<br>(press R to restart)';
   document.body.appendChild(gameOverDiv);
 }
 
-// Restart game function
 function restartGame() {
-  // Remove game over text
-  if (gameOverDiv) {
-    document.body.removeChild(gameOverDiv);
-    gameOverDiv = null;
-  }
-
-  // Remove explosion particles if any
+  if (gameOverDiv) document.body.removeChild(gameOverDiv);
+  gameOverDiv = null;
   explosionParticles.forEach(p => scene.remove(p));
   explosionParticles.length = 0;
-
-  // Reset game variables
   score = 0;
   waveNumber = 1;
   gameOver = false;
   lastConeSpawn = 0;
-
-  // Update score display
   scoreDiv.textContent = `Score: ${score}`;
-
-  // Remove all collectibles and cones from scene
   collectibles.forEach(c => scene.remove(c));
   collectibles.length = 0;
-
   cones.forEach(c => scene.remove(c));
   cones.length = 0;
-
-  // Add player cube back if it's removed
-  if (!scene.children.includes(playerCube)) {
-    scene.add(playerCube);
-  }
-
-  // Reset player position
-  playerCube.position.set(0, 0.5, 0);
-
-  // Spawn first wave
+  bombs.forEach(b => scene.remove(b));
+  bombs.length = 0;
+  (playerModel || playerCube).position.set(0, playerModel ? 0 : 0.5, 0);
+  if (playerModel) scene.add(playerModel);
+  else if (!scene.children.includes(playerCube)) scene.add(playerCube);
   spawnWave(waveNumber);
 }
 
-// Listen for 'r' key to restart game after game over
 window.addEventListener('keydown', (e) => {
   if (gameOver && (e.key === 'r' || e.key === 'R')) {
     e.preventDefault();
@@ -155,81 +125,74 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// Spawn wave function
 function spawnWave(waveNum) {
   collectibles.forEach(c => scene.remove(c));
   collectibles.length = 0;
-
-  const baseCount = 5;
-  const count = baseCount * waveNum;
-
+  const count = 5 * waveNum;
   for (let i = 0; i < count; i++) {
-    const geo = new THREE.BoxGeometry(2, 0.5, 1); // wider rectangle: width=2, height=0.5, depth=1
+    const geo = new THREE.BoxGeometry(2, 0.5, 1);
     const mat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
     const collectible = new THREE.Mesh(geo, mat);
-
-    collectible.position.set(
-      (Math.random() - 0.5) * 18,
-      0.25,
-      (Math.random() - 0.5) * 18
-    );
-
+    collectible.position.set((Math.random() - 0.5) * 18, 0.25, (Math.random() - 0.5) * 18);
     scene.add(collectible);
     collectibles.push(collectible);
   }
-
-  // Reset player position
-  playerCube.position.set(0, 0.5, 0);
+  (playerModel || playerCube).position.set(0, playerModel ? 0 : 0.5, 0);
 }
 
-// Spawn cones periodically
 let lastConeSpawn = 0;
 function spawnCone() {
   const cone = new THREE.Mesh(coneGeometry, coneMaterial);
-  cone.position.set(
-    (Math.random() - 0.5) * 18,
-    8,
-    (Math.random() - 0.5) * 18
-  );
-  cone.rotation.x = Math.PI;  // upside down cone
+  cone.position.set((Math.random() - 0.5) * 18, 8, (Math.random() - 0.5) * 18);
+  cone.rotation.x = Math.PI;
   scene.add(cone);
   cones.push(cone);
 }
 
-// Simple AABB collision detection
+function spawnBomb() {
+  if (!bombModel || (!playerModel && !playerCube)) return;
+  const px = playerModel ? playerModel.position.x : playerCube.position.x;
+  const pz = playerModel ? playerModel.position.z : playerCube.position.z;
+  let x, z;
+  const minDistance = 6;
+  let attempts = 0;
+  do {
+    x = (Math.random() - 0.5) * 18;
+    z = (Math.random() - 0.5) * 18;
+    attempts++;
+  } while (Math.hypot(x - px, z - pz) < minDistance && attempts < 10);
+  const bombClone = bombModel.clone(true);
+  bombClone.position.set(x, 8, z);
+  bombClone.rotation.set(Math.PI / 2, 0, 0);
+  scene.add(bombClone);
+  bombs.push(bombClone);
+}
+
+function isInScene(object) {
+  while(object) {
+    if (object.parent === scene) return true;
+    object = object.parent;
+  }
+  return false;
+}
+
 function checkCollision(obj1, obj2) {
-  obj1.geometry.computeBoundingBox();
-  obj2.geometry.computeBoundingBox();
-
-  obj1.updateMatrixWorld();
-  obj2.updateMatrixWorld();
-
-  const box1 = obj1.geometry.boundingBox.clone();
-  box1.applyMatrix4(obj1.matrixWorld);
-
-  const box2 = obj2.geometry.boundingBox.clone();
-  box2.applyMatrix4(obj2.matrixWorld);
-
+  if (!obj1 || !obj2) return false;
+  if (!isInScene(obj1) || !isInScene(obj2)) return false;
+  const box1 = new THREE.Box3().setFromObject(obj1);
+  const box2 = new THREE.Box3().setFromObject(obj2);
   return box1.intersectsBox(box2);
 }
 
-// Create explosion particles at position
+
+
 function createExplosion(position) {
-  const particleCount = 30;
-  for (let i = 0; i < particleCount; i++) {
+  for (let i = 0; i < 30; i++) {
     const geometry = new THREE.SphereGeometry(0.05, 8, 8);
     const material = new THREE.MeshStandardMaterial({ color: 0xffaa00, transparent: true });
     const particle = new THREE.Mesh(geometry, material);
-
     particle.position.copy(position);
-
-    // Give each particle a random velocity vector
-    particle.userData.velocity = new THREE.Vector3(
-      (Math.random() - 0.5) * 2,
-      Math.random() * 2,
-      (Math.random() - 0.5) * 2
-    );
-
+    particle.userData.velocity = new THREE.Vector3((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2);
     scene.add(particle);
     explosionParticles.push(particle);
   }
@@ -238,64 +201,61 @@ function createExplosion(position) {
 
 function animate(time = 0) {
   requestAnimationFrame(animate);
-
-  // Animate explosion particles if any
   if (explosionParticles.length > 0) {
     const elapsed = performance.now() - explosionStartTime;
     for (let i = explosionParticles.length - 1; i >= 0; i--) {
       const p = explosionParticles[i];
-
-      // Move particle by velocity
       p.position.addScaledVector(p.userData.velocity, 0.1);
-
-      // Slow down velocity gradually (damping)
       p.userData.velocity.multiplyScalar(0.9);
-
-      // Fade out the particle
       p.material.opacity = 1 - elapsed / explosionDuration;
-
-      // Remove particle if faded
       if (p.material.opacity <= 0) {
         scene.remove(p);
         explosionParticles.splice(i, 1);
       }
     }
-
-    // When explosion ends, show Game Over message
     if (elapsed >= explosionDuration && !gameOver) {
       gameOver = true;
       showGameOver();
     }
-
     renderer.render(scene, camera);
-    return;  // Skip rest of game loop while explosion playing
+    return;
   }
-
   if (gameOver) {
     renderer.render(scene, camera);
     return;
   }
 
-  // WASD movement
-  const speed = 0.25;  // faster player speed
-  if (keys.w) playerCube.position.z -= speed;
-  if (keys.s) playerCube.position.z += speed;
-  if (keys.a) playerCube.position.x -= speed;
-  if (keys.d) playerCube.position.x += speed;
+  const speed = 0.25;
+  const moveVector = new THREE.Vector3(0, 0, 0);
+  if (keys.w) moveVector.z -= 1;
+  if (keys.s) moveVector.z += 1;
+  if (keys.a) moveVector.x -= 1;
+  if (keys.d) moveVector.x += 1;
 
-  // Update camera to follow player from 45-degree angle
-  const cameraOffset = new THREE.Vector3(5, 8, 5); // offset from player (x, y, z)
-  camera.position.copy(playerCube.position).add(cameraOffset);
-  camera.lookAt(playerCube.position);
+  if (moveVector.length() > 0) {
+    moveVector.normalize();
+    if (playerModel) {
+      playerModel.position.addScaledVector(moveVector, speed);
+      playerModel.rotation.y = Math.atan2(moveVector.x, moveVector.z);
+    } else {
+      playerCube.position.addScaledVector(moveVector, speed);
+      playerCube.rotation.y = Math.atan2(moveVector.x, moveVector.z);
+    }
+    const cameraOffset = new THREE.Vector3(5, 10, 8);
+    camera.position.copy((playerModel || playerCube).position).add(cameraOffset);
+    camera.lookAt((playerModel || playerCube).position);
+  }
 
-  // Spin player cube
-  playerCube.rotation.x += 0.01;
-  playerCube.rotation.y += 0.01;
+  const player = playerModel || playerCube;
+if (!player || !scene.children.includes(player)) {
+  renderer.render(scene, camera);
+  return; // no player, stop processing collisions & movement
+}
 
-  // Check collisions with collectibles
+
   for (let i = collectibles.length - 1; i >= 0; i--) {
     const c = collectibles[i];
-    if (checkCollision(playerCube, c)) {
+    if (checkCollision(playerModel || playerCube, c)) {
       scene.remove(c);
       collectibles.splice(i, 1);
       score++;
@@ -303,43 +263,48 @@ function animate(time = 0) {
     }
   }
 
-  // Next wave
   if (collectibles.length === 0) {
     waveNumber++;
     spawnWave(waveNumber);
   }
 
-  // Spawn cones every coneSpawnInterval ms
-  if (time - lastConeSpawn > coneSpawnInterval) {
+  if (time > 3000 && time - lastConeSpawn > coneSpawnInterval) {
     spawnCone();
+    spawnBomb();
     lastConeSpawn = time;
   }
 
-  // Move cones down & check collision with player
   for (let i = cones.length - 1; i >= 0; i--) {
     const cone = cones[i];
     cone.position.y -= coneFallSpeed;
-
-    // Remove cone if below ground
     if (cone.position.y < 0) {
       scene.remove(cone);
       cones.splice(i, 1);
       continue;
     }
-
-    // Check collision with player cube
-    if (checkCollision(playerCube, cone)) {
-      // Remove the player cube (destroy)
-      scene.remove(playerCube);
-
-      // Remove the cone
+    if (checkCollision(playerModel || playerCube, cone)) {
+      scene.remove(playerModel || playerCube);
       scene.remove(cone);
       cones.splice(i, 1);
+      createExplosion((playerModel || playerCube).position.clone());
+      break;
+    }
+  }
 
-      // Create explosion at player cube position
-      createExplosion(playerCube.position.clone());
-
-      // Don't set gameOver here directly! Explosion animation sets it after
+  for (let i = bombs.length - 1; i >= 0; i--) {
+    const bomb = bombs[i];
+    bomb.position.y -= coneFallSpeed;
+    if (bomb.position.y < 0) {
+      scene.remove(bomb);
+      bombs.splice(i, 1);
+      continue;
+    }
+    if (time < 3000) continue;
+    if (checkCollision(playerModel || playerCube, bomb)) {
+      scene.remove(playerModel || playerCube);
+      scene.remove(bomb);
+      bombs.splice(i, 1);
+      createExplosion((playerModel || playerCube).position.clone());
       break;
     }
   }
@@ -347,7 +312,10 @@ function animate(time = 0) {
   renderer.render(scene, camera);
 }
 
-spawnWave(waveNumber);
+setTimeout(() => {
+  spawnWave(waveNumber);
+}, 3000);
+
 animate();
 
 window.addEventListener('resize', () => {
