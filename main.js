@@ -50,7 +50,7 @@ const tileSize = 10;
 // Main play area ground - baby blue
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(20, 20),
-  new THREE.MeshStandardMaterial({ color: 0x87CEEB }) // baby blue (skyblue)
+  new THREE.MeshStandardMaterial({ color: 0x87CEEB }) // baby blue
 );
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true; // ground receives shadows
@@ -148,6 +148,8 @@ let cameraTarget = new THREE.Vector3(0, 0, 0); // Where the camera is looking
 // Tile storage and interactive tiles
 const tiles = new Map(); // store generated tiles
 const interactiveTiles = []; // tiles that can be clicked/interacted with
+let currentPlayerTile = null; // track the tile the player is currently on
+let previousPlayerTileKey = null; // track previous tile to reset it
 
 // Tile types and their associated websites
 const tileTypes = [
@@ -311,18 +313,20 @@ function generateTilesAroundPlayer() {
             emissive: tileType.color,
             emissiveIntensity: 0.2
           });
-          tileData = { website: tileType.website, name: tileType.name };
+          tileData = { website: tileType.website, name: tileType.name, isInteractive: true };
         } else {
           // Regular landscape tile - baby blue variations
           const blueVariation = Math.floor(Math.random() * 0x222222); // subtle variation
           const babyBlue = 0x87CEEB + blueVariation - 0x111111; // slight variations around baby blue
           tileMaterial = new THREE.MeshStandardMaterial({ color: babyBlue });
+          tileData = { website: null, name: null, isInteractive: false };
         }
         
         const tileGeometry = new THREE.PlaneGeometry(tileSize, tileSize);
         const tile = new THREE.Mesh(tileGeometry, tileMaterial);
         tile.rotation.x = -Math.PI / 2;
-        tile.position.set(tileX, 0, tileZ);
+        // Position tile at center of grid cell
+        tile.position.set(tileX + tileSize/2, 0, tileZ + tileSize/2);
         tile.userData = tileData;
         tile.receiveShadow = true;
         
@@ -352,7 +356,7 @@ function generateTilesAroundPlayer() {
           });
           const labelGeometry = new THREE.PlaneGeometry(tileSize * 0.8, tileSize * 0.2);
           const label = new THREE.Mesh(labelGeometry, labelMaterial);
-          label.position.set(tileX, 1, tileZ);
+          label.position.set(tileX + tileSize/2, 1, tileZ + tileSize/2);
           scene.add(label);
         }
       }
@@ -363,8 +367,24 @@ function generateTilesAroundPlayer() {
 // Check if player is on an interactive tile
 function checkTileInteraction() {
   const player = playerModel || playerCube;
-  const playerX = Math.floor(player.position.x / tileSize);
-  const playerZ = Math.floor(player.position.z / tileSize);
+  
+  // Use the same calculation method as updatePlayerTile
+  let playerGroundX, playerGroundZ;
+  
+  if (playerModel) {
+    // For the car model, calculate the bounding box center
+    const boundingBox = new THREE.Box3().setFromObject(playerModel);
+    const center = boundingBox.getCenter(new THREE.Vector3());
+    playerGroundX = center.x;
+    playerGroundZ = center.z;
+  } else {
+    // For the cube, use the position directly
+    playerGroundX = player.position.x;
+    playerGroundZ = player.position.z;
+  }
+  
+  const playerX = Math.floor(playerGroundX / tileSize);
+  const playerZ = Math.floor(playerGroundZ / tileSize);
   const tileKey = `${playerX},${playerZ}`;
   
   if (tiles.has(tileKey)) {
@@ -374,6 +394,71 @@ function checkTileInteraction() {
       keys[' '] = false; // prevent multiple opens
     }
   }
+}
+
+// Update current player tile with bobbing and glow effects
+function updatePlayerTile(time) {
+  const player = playerModel || playerCube;
+  
+  // Get the player's actual ground position (accounting for model offset)
+  let playerGroundX, playerGroundZ;
+  
+  if (playerModel) {
+    // For the car model, calculate the bounding box center
+    const boundingBox = new THREE.Box3().setFromObject(playerModel);
+    const center = boundingBox.getCenter(new THREE.Vector3());
+    playerGroundX = center.x;
+    playerGroundZ = center.z;
+  } else {
+    // For the cube, use the position directly
+    playerGroundX = player.position.x;
+    playerGroundZ = player.position.z;
+  }
+  
+  // Calculate tile coordinates from the ground position
+  const playerX = Math.floor(playerGroundX / tileSize);
+  const playerZ = Math.floor(playerGroundZ / tileSize);
+  const tileKey = `${playerX},${playerZ}`;
+  
+  // Reset previous tile if we moved to a new one
+  if (previousPlayerTileKey && previousPlayerTileKey !== tileKey && tiles.has(previousPlayerTileKey)) {
+    const prevTile = tiles.get(previousPlayerTileKey);
+    prevTile.position.y = 0; // reset height
+    
+    // Reset material to original state
+    if (prevTile.userData.isInteractive) {
+      prevTile.material.emissiveIntensity = 0.2; // restore original emissive
+    } else {
+      prevTile.material.emissive.setHex(0x000000); // remove glow from regular tiles
+    }
+  }
+  
+  // Update current tile
+  if (tiles.has(tileKey)) {
+    const tile = tiles.get(tileKey);
+    currentPlayerTile = tile;
+    
+    // Bobbing motion - keep it above ground level
+    const bobSpeed = 0.003;
+    const bobHeight = 0.15; // reduced height to prevent clipping
+    const bobOffset = Math.sin(time * bobSpeed) * bobHeight;
+    tile.position.y = Math.max(0, bobOffset); // never go below ground level
+    
+    // Add glow effect
+    if (tile.userData.isInteractive) {
+      // Interactive tiles get enhanced glow with their original color
+      tile.material.emissiveIntensity = 0.4 + Math.sin(time * 0.005) * 0.1;
+    } else {
+      // Regular tiles get bright blue glow
+      const glowIntensity = 0.3 + Math.sin(time * 0.005) * 0.5; // increased intensity
+      tile.material.emissive.setHex(0x4499FF); // brighter blue
+      tile.material.emissiveIntensity = glowIntensity;
+    }
+  } else {
+    currentPlayerTile = null;
+  }
+  
+  previousPlayerTileKey = tileKey;
 }
 
 function spawnWave(waveNum) {
@@ -527,6 +612,9 @@ function animate(time = 0) {
   
   // Generate tiles around player
   generateTilesAroundPlayer();
+  
+  // Update current player tile with effects
+  updatePlayerTile(time);
   
   // Check for tile interactions
   checkTileInteraction();
