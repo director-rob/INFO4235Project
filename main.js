@@ -138,6 +138,13 @@ const coneFallSpeed = 0.25;
 const coneSpawnInterval = 200;
 let gameOver = false;
 
+// Follower mob system
+let followers = [];
+const followerSpawnDelay = 8000; // 8 seconds
+const followerSpeed = 0.15; // slower than player's 0.25
+let followersSpawned = false;
+let gameStartTime = 0;
+
 // Camera drag functionality
 let isDragging = false;
 let previousMousePosition = { x: 0, y: 0 };
@@ -239,6 +246,14 @@ function onMouseClick(event) {
 const coneGeometry = new THREE.ConeGeometry(0.3, 1, 8);
 const coneMaterial = new THREE.MeshStandardMaterial({ color: 0xffa500 });
 
+// Follower mob geometry and material
+const followerGeometry = new THREE.CylinderGeometry(0.4, 0.4, 1, 8);
+const followerMaterial = new THREE.MeshStandardMaterial({ 
+  color: 0x44ff44, // friendly green instead of red
+  emissive: 0x003300,
+  emissiveIntensity: 0.2
+});
+
 const explosionParticles = [];
 const explosionDuration = 1000;
 let explosionStartTime = 0;
@@ -261,6 +276,13 @@ function restartGame() {
   waveNumber = 1;
   gameOver = false;
   lastConeSpawn = 0;
+  
+  // Reset follower system
+  followers.forEach(f => scene.remove(f));
+  followers.length = 0;
+  followersSpawned = false;
+  gameStartTime = performance.now();
+  
   scoreDiv.textContent = `Score: ${score}`;
   collectibles.forEach(c => scene.remove(c));
   collectibles.length = 0;
@@ -489,6 +511,103 @@ function spawnCone() {
   cones.push(cone);
 }
 
+function spawnFollowers() {
+  if (followersSpawned) return;
+  
+  const numFollowers = 3 + Math.floor(waveNumber / 2); // more followers in later waves
+  for (let i = 0; i < numFollowers; i++) {
+    const follower = new THREE.Mesh(followerGeometry, followerMaterial.clone());
+    
+    // Spawn followers in a circle around the player, far away
+    const angle = (i / numFollowers) * Math.PI * 2;
+    const spawnDistance = 25;
+    const player = playerModel || playerCube;
+    follower.position.set(
+      player.position.x + Math.cos(angle) * spawnDistance,
+      0.5,
+      player.position.z + Math.sin(angle) * spawnDistance
+    );
+    
+    // Add bouncing properties
+    follower.userData = {
+      bouncePhase: Math.random() * Math.PI * 2,
+      bounceSpeed: 0.01 + Math.random() * 0.005
+    };
+    
+    follower.castShadow = true;
+    follower.receiveShadow = true;
+    scene.add(follower);
+    followers.push(follower);
+  }
+  followersSpawned = true;
+}
+
+function updateFollowers(time) {
+  const player = playerModel || playerCube;
+  if (!player) return;
+  
+  followers.forEach((follower, index) => {
+    // Calculate direction to player
+    const direction = new THREE.Vector3();
+    direction.subVectors(player.position, follower.position);
+    const distanceToPlayer = direction.length();
+    direction.normalize();
+    
+    // Separation behavior - avoid other followers
+    const separationForce = new THREE.Vector3();
+    const separationDistance = 3; // minimum distance between followers
+    
+    followers.forEach((otherFollower, otherIndex) => {
+      if (index === otherIndex) return;
+      
+      const separationDir = new THREE.Vector3();
+      separationDir.subVectors(follower.position, otherFollower.position);
+      const separationDist = separationDir.length();
+      
+      if (separationDist < separationDistance && separationDist > 0) {
+        separationDir.normalize();
+        separationDir.multiplyScalar((separationDistance - separationDist) / separationDistance);
+        separationForce.add(separationDir);
+      }
+    });
+    
+    // Friendly behavior - stop at safe distance (about 1.5 units from player)
+    const safeDistance = 1.5;
+    const finalDirection = new THREE.Vector3();
+    
+    if (distanceToPlayer > safeDistance) {
+      // Move towards player but add separation force
+      finalDirection.copy(direction);
+      finalDirection.multiplyScalar(followerSpeed);
+      finalDirection.add(separationForce.multiplyScalar(0.3)); // gentler separation
+      
+      follower.position.add(finalDirection);
+      
+      // Hopping movement - create little bounces as they move
+      follower.userData.bouncePhase += follower.userData.bounceSpeed * 2; // faster for hopping
+      const hopHeight = Math.abs(Math.sin(follower.userData.bouncePhase)) * 0.4; // hop up and down
+      follower.position.y = 0.5 + hopHeight;
+    } else {
+      // Stay put but still bounce gently when close to player
+      follower.userData.bouncePhase += follower.userData.bounceSpeed * 0.5; // slower gentle bounce
+      const gentleBounce = Math.sin(follower.userData.bouncePhase) * 0.1;
+      follower.position.y = 0.5 + gentleBounce;
+      
+      // Still apply separation even when not moving toward player
+      if (separationForce.length() > 0) {
+        separationForce.multiplyScalar(0.2);
+        follower.position.add(separationForce);
+      }
+    }
+    
+    // Rotate to face player
+    follower.lookAt(player.position);
+    
+    // Remove damage since they're now friendly
+    // No collision checking needed anymore
+  });
+}
+
 function spawnBomb() {
   if (!bombModel || (!playerModel && !playerCube)) return;
   const px = playerModel ? playerModel.position.x : playerCube.position.x;
@@ -550,6 +669,12 @@ function createExplosion(position) {
 
 function animate(time = 0) {
   requestAnimationFrame(animate);
+  
+  // Initialize game start time
+  if (gameStartTime === 0) {
+    gameStartTime = time;
+  }
+  
   if (explosionParticles.length > 0) {
     const elapsed = performance.now() - explosionStartTime;
     for (let i = explosionParticles.length - 1; i >= 0; i--) {
@@ -572,6 +697,16 @@ function animate(time = 0) {
   if (gameOver) {
     renderer.render(scene, camera);
     return;
+  }
+
+  // Spawn followers after delay
+  if (!followersSpawned && time - gameStartTime > followerSpawnDelay) {
+    spawnFollowers();
+  }
+  
+  // Update followers
+  if (followersSpawned) {
+    updateFollowers(time);
   }
 
   const speed = 0.25;
@@ -687,6 +822,7 @@ if (!player || !scene.children.includes(player)) {
 
 setTimeout(() => {
   spawnWave(waveNumber);
+  gameStartTime = performance.now(); // Initialize game start time
 }, 3000);
 
 animate();
