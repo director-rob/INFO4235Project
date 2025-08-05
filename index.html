@@ -16,11 +16,34 @@
       user-select: none;
       z-index: 10;
     }
+    #instructions {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      color: white;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      user-select: none;
+      z-index: 10;
+      background: rgba(0,0,0,0.5);
+      padding: 10px;
+      border-radius: 5px;
+      max-width: 250px;
+    }
   </style>
 </head>
 <body>
   <canvas id="three-canvas"></canvas>
   <div id="score">Score: 0</div>
+  <div id="instructions">
+    <strong>Controls:</strong><br>
+    • Arrow Keys: Move car<br>
+    • Mouse: Drag to look around<br>
+    • Space: Interact with colored tiles<br>
+    • Click: Click colored tiles to visit websites<br>
+    • R: Restart game (when game over)<br><br>
+    <strong>Goal:</strong> Collect red rectangles, avoid falling objects, explore the world!
+  </div>
 
   <script type="module" src="/main.js"></script>
 </body>
