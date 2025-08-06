@@ -76,9 +76,11 @@ scene.add(playerCube);
 
 let playerModel = null;
 let bombModel = null;
+let ghostModel = null;
 
 const gltfLoader = new GLTFLoader();
 const bombLoader = new GLTFLoader();
+const ghostLoader = new GLTFLoader();
 gltfLoader.load('car/scene.gltf', (gltf) => {
   playerModel = gltf.scene;
   playerModel.scale.set(0.7, 0.7, 0.7);
@@ -101,6 +103,17 @@ bombLoader.load('bomb/scene.gltf', (gltf) => {
   //bombModel.rotation.set(Math.PI, 0, 0);
   bombModel.scale.set(0.01, 0.01, 0.01);
   bombModel.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+});
+
+ghostLoader.load('blinky_from_pacman.glb', (gltf) => {
+  ghostModel = gltf.scene;
+  ghostModel.scale.set(0.5, 0.5, 0.5);
+  ghostModel.traverse((child) => {
     if (child.isMesh) {
       child.castShadow = true;
       child.receiveShadow = true;
@@ -134,9 +147,19 @@ let score = 0;
 let waveNumber = 1;
 
 let collectibles = [], cones = [], bombs = [];
-const coneFallSpeed = 0.25;
-const coneSpawnInterval = 200;
+const coneFallSpeed = 0.125; // half speed (was 0.25)
+const coneSpawnInterval = 400; // less dense (was 200)
 let gameOver = false;
+
+// Ghost system (after level 3)
+let ghost = null;
+let ghostSpawned = false;
+const ghostSpeed = 0.06; // much slower than player (was 0.12)
+
+// Power pellet system
+let powerPellet = null;
+let powerPelletSpawned = false;
+let protectionActive = false;
 
 // Follower mob system
 let followers = [];
@@ -254,6 +277,22 @@ const followerMaterial = new THREE.MeshStandardMaterial({
   emissiveIntensity: 0.2
 });
 
+// Power pellet geometry and material
+const powerPelletGeometry = new THREE.BoxGeometry(1.5, 0.8, 1.5);
+const powerPelletMaterial = new THREE.MeshStandardMaterial({ 
+  color: 0x00ff00, // bright green
+  emissive: 0x004400,
+  emissiveIntensity: 0.3
+});
+
+// Ghost fallback geometry and material
+const ghostGeometry = new THREE.CylinderGeometry(1, 1, 2, 16);
+const ghostMaterial = new THREE.MeshStandardMaterial({ 
+  color: 0xff4444, // red ghost
+  emissive: 0x440000,
+  emissiveIntensity: 0.3
+});
+
 const explosionParticles = [];
 const explosionDuration = 1000;
 let explosionStartTime = 0;
@@ -283,12 +322,37 @@ function restartGame() {
   followersSpawned = false;
   gameStartTime = performance.now();
   
+  // Reset ghost system completely
+  if (ghost) {
+    scene.remove(ghost);
+    ghost = null;
+  }
+  ghostSpawned = false;
+  
+  // Reset power pellet system
+  if (powerPellet) {
+    scene.remove(powerPellet);
+    powerPellet = null;
+  }
+  powerPelletSpawned = false;
+  protectionActive = false;
+  
   scoreDiv.textContent = `Score: ${score}`;
   collectibles.forEach(c => scene.remove(c));
   collectibles.length = 0;
-  cones.forEach(c => scene.remove(c));
+  cones.forEach(c => {
+    scene.remove(c);
+    if (c.userData.shadowIndicator) {
+      scene.remove(c.userData.shadowIndicator);
+    }
+  });
   cones.length = 0;
-  bombs.forEach(b => scene.remove(b));
+  bombs.forEach(b => {
+    scene.remove(b);
+    if (b.userData.shadowIndicator) {
+      scene.remove(b.userData.shadowIndicator);
+    }
+  });
   bombs.length = 0;
   (playerModel || playerCube).position.set(0, playerModel ? 0 : 0.5, 0);
   if (playerModel) scene.add(playerModel);
@@ -491,36 +555,74 @@ function spawnWave(waveNum) {
     const geo = new THREE.BoxGeometry(2, 0.5, 1);
     const mat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
     const collectible = new THREE.Mesh(geo, mat);
-    collectible.position.set((Math.random() - 0.5) * 18, 0.25, (Math.random() - 0.5) * 18);
+    // Spawn across the entire 20x20 main ground area
+    collectible.position.set((Math.random() - 0.5) * 19, 0.25, (Math.random() - 0.5) * 19);
     collectible.castShadow = true;
     collectible.receiveShadow = true;
     scene.add(collectible);
     collectibles.push(collectible);
   }
+  
+  // Reset ghost system for new wave
+  if (ghost) {
+    scene.remove(ghost);
+    ghost = null;
+  }
+  ghostSpawned = false;
+  
+  // Don't reset followers - they should carry over between waves
+  // Just reset the spawn flag so more can be added
+  followersSpawned = false;
+  
+  // Spawn power pellet once per level
+  if (!powerPelletSpawned) {
+    spawnPowerPellet();
+  }
+  
   (playerModel || playerCube).position.set(0, playerModel ? 0 : 0.5, 0);
 }
 
 let lastConeSpawn = 0;
 function spawnCone() {
   const cone = new THREE.Mesh(coneGeometry, coneMaterial);
-  cone.position.set((Math.random() - 0.5) * 18, 8, (Math.random() - 0.5) * 18);
+  // Spawn across the entire 20x20 main ground area
+  cone.position.set((Math.random() - 0.5) * 19, 20, (Math.random() - 0.5) * 19); // spawn from much higher
   cone.rotation.x = Math.PI;
   cone.castShadow = true;
   cone.receiveShadow = true;
+  
+  // Create ground shadow indicator
+  const shadowGeometry = new THREE.CircleGeometry(0.5, 16);
+  const shadowMaterial = new THREE.MeshBasicMaterial({ 
+    color: 0x000000, 
+    transparent: true, 
+    opacity: 0.1 // start very faint
+  });
+  const shadowIndicator = new THREE.Mesh(shadowGeometry, shadowMaterial);
+  shadowIndicator.rotation.x = -Math.PI / 2;
+  shadowIndicator.position.set(cone.position.x, 0.01, cone.position.z); // slightly above ground
+  scene.add(shadowIndicator);
+  
+  // Store shadow reference on the cone
+  cone.userData.shadowIndicator = shadowIndicator;
+  cone.userData.maxHeight = 20; // starting height for shadow calculations
+  
   scene.add(cone);
   cones.push(cone);
 }
 
 function spawnFollowers() {
-  if (followersSpawned) return;
+  if (followersSpawned || !protectionActive) return;
   
   const numFollowers = 3 + Math.floor(waveNumber / 2); // more followers in later waves
   for (let i = 0; i < numFollowers; i++) {
     const follower = new THREE.Mesh(followerGeometry, followerMaterial.clone());
     
-    // Spawn followers in a circle around the player, far away
-    const angle = (i / numFollowers) * Math.PI * 2;
-    const spawnDistance = 25;
+    // Spawn followers from the same general direction (behind player) with slight variations
+    const baseAngle = Math.PI; // behind the player (180 degrees)
+    const angleVariation = (Math.random() - 0.5) * 0.8; // ±0.4 radians (about ±23 degrees)
+    const angle = baseAngle + angleVariation;
+    const spawnDistance = 25 + Math.random() * 10; // vary distance slightly
     const player = playerModel || playerCube;
     follower.position.set(
       player.position.x + Math.cos(angle) * spawnDistance,
@@ -528,10 +630,14 @@ function spawnFollowers() {
       player.position.z + Math.sin(angle) * spawnDistance
     );
     
-    // Add bouncing properties
+    // Add bouncing properties and collision count
     follower.userData = {
       bouncePhase: Math.random() * Math.PI * 2,
-      bounceSpeed: 0.01 + Math.random() * 0.005
+      bounceSpeed: 0.01 + Math.random() * 0.005,
+      collisionCount: 0,
+      maxCollisions: 3,
+      isFlashing: false,
+      flashStartTime: 0
     };
     
     follower.castShadow = true;
@@ -547,6 +653,44 @@ function updateFollowers(time) {
   if (!player) return;
   
   followers.forEach((follower, index) => {
+    // Handle flashing effect
+    if (follower.userData.isFlashing) {
+      const flashDuration = 500; // 0.5 seconds
+      const elapsed = time - follower.userData.flashStartTime;
+      if (elapsed < flashDuration) {
+        // Flash red
+        const flashIntensity = Math.sin(elapsed * 0.02) * 0.5 + 0.5;
+        follower.material.color.setHex(0xff0000);
+        follower.material.emissive.setHex(0x440000);
+        follower.material.emissiveIntensity = flashIntensity * 0.5;
+      } else {
+        // Return to normal green
+        follower.userData.isFlashing = false;
+        follower.material.color.setHex(0x44ff44);
+        follower.material.emissive.setHex(0x003300);
+        follower.material.emissiveIntensity = 0.2;
+      }
+    }
+    
+    // Check for collision with ghost
+    if (ghost && checkCollision(follower, ghost)) {
+      follower.userData.collisionCount++;
+      follower.userData.isFlashing = true;
+      follower.userData.flashStartTime = time;
+      
+      // Bounce ghost away
+      const bounceDirection = new THREE.Vector3();
+      bounceDirection.subVectors(ghost.position, follower.position).normalize();
+      ghost.position.addScaledVector(bounceDirection, 5); // push ghost away
+      
+      // Remove follower if it's used up
+      if (follower.userData.collisionCount >= follower.userData.maxCollisions) {
+        scene.remove(follower);
+        followers.splice(index, 1);
+        return;
+      }
+    }
+    
     // Calculate direction to player
     const direction = new THREE.Vector3();
     direction.subVectors(player.position, follower.position);
@@ -555,7 +699,7 @@ function updateFollowers(time) {
     
     // Separation behavior - avoid other followers
     const separationForce = new THREE.Vector3();
-    const separationDistance = 3; // minimum distance between followers
+    const separationDistance = 2.5; // minimum distance between followers
     
     followers.forEach((otherFollower, otherIndex) => {
       if (index === otherIndex) return;
@@ -571,40 +715,37 @@ function updateFollowers(time) {
       }
     });
     
-    // Friendly behavior - stop at safe distance (about 1.5 units from player)
-    const safeDistance = 1.5;
+    // Patient following behavior - stay behind player at a comfortable distance
+    const followDistance = 3 + (index * 0.8); // stagger followers behind each other
     const finalDirection = new THREE.Vector3();
     
-    if (distanceToPlayer > safeDistance) {
+    if (distanceToPlayer > followDistance) {
       // Move towards player but add separation force
       finalDirection.copy(direction);
-      finalDirection.multiplyScalar(followerSpeed);
-      finalDirection.add(separationForce.multiplyScalar(0.3)); // gentler separation
+      finalDirection.multiplyScalar(followerSpeed * 0.8); // slower, more patient movement
+      finalDirection.add(separationForce.multiplyScalar(0.4)); // stronger separation
       
       follower.position.add(finalDirection);
       
-      // Hopping movement - create little bounces as they move
-      follower.userData.bouncePhase += follower.userData.bounceSpeed * 2; // faster for hopping
-      const hopHeight = Math.abs(Math.sin(follower.userData.bouncePhase)) * 0.4; // hop up and down
+      // Gentle hopping movement when following
+      follower.userData.bouncePhase += follower.userData.bounceSpeed * 1.5;
+      const hopHeight = Math.abs(Math.sin(follower.userData.bouncePhase)) * 0.3;
       follower.position.y = 0.5 + hopHeight;
     } else {
-      // Stay put but still bounce gently when close to player
-      follower.userData.bouncePhase += follower.userData.bounceSpeed * 0.5; // slower gentle bounce
-      const gentleBounce = Math.sin(follower.userData.bouncePhase) * 0.1;
+      // Wait patiently with gentle idle bounce
+      follower.userData.bouncePhase += follower.userData.bounceSpeed * 0.3; // very slow idle bounce
+      const gentleBounce = Math.sin(follower.userData.bouncePhase) * 0.08; // subtle bounce
       follower.position.y = 0.5 + gentleBounce;
       
-      // Still apply separation even when not moving toward player
+      // Still apply separation when waiting
       if (separationForce.length() > 0) {
-        separationForce.multiplyScalar(0.2);
+        separationForce.multiplyScalar(0.3);
         follower.position.add(separationForce);
       }
     }
     
     // Rotate to face player
     follower.lookAt(player.position);
-    
-    // Remove damage since they're now friendly
-    // No collision checking needed anymore
   });
 }
 
@@ -616,12 +757,13 @@ function spawnBomb() {
   const minDistance = 6;
   let attempts = 0;
   do {
-    x = (Math.random() - 0.5) * 18;
-    z = (Math.random() - 0.5) * 18;
+    // Spawn across the entire 20x20 main ground area
+    x = (Math.random() - 0.5) * 19;
+    z = (Math.random() - 0.5) * 19;
     attempts++;
   } while (Math.hypot(x - px, z - pz) < minDistance && attempts < 10);
   const bombClone = bombModel.clone(true);
-  bombClone.position.set(x, 8, z);
+  bombClone.position.set(x, 20, z); // spawn from much higher
   bombClone.rotation.set(Math.PI / 2, 0, 0);
   
   // Enable shadows for bomb model
@@ -632,8 +774,149 @@ function spawnBomb() {
     }
   });
   
+  // Create ground shadow indicator for bomb
+  const shadowGeometry = new THREE.CircleGeometry(0.8, 16); // slightly larger for bombs
+  const shadowMaterial = new THREE.MeshBasicMaterial({ 
+    color: 0xff0000, // red shadow for bombs to indicate danger
+    transparent: true, 
+    opacity: 0.1 // start very faint
+  });
+  const shadowIndicator = new THREE.Mesh(shadowGeometry, shadowMaterial);
+  shadowIndicator.rotation.x = -Math.PI / 2;
+  shadowIndicator.position.set(x, 0.01, z); // slightly above ground
+  scene.add(shadowIndicator);
+  
+  // Store shadow reference on the bomb
+  bombClone.userData.shadowIndicator = shadowIndicator;
+  bombClone.userData.maxHeight = 20; // starting height for shadow calculations
+  
   scene.add(bombClone);
   bombs.push(bombClone);
+}
+
+function spawnPowerPellet() {
+  if (powerPelletSpawned) return;
+  
+  powerPellet = new THREE.Mesh(powerPelletGeometry, powerPelletMaterial);
+  // Spawn randomly in the play area
+  powerPellet.position.set(
+    (Math.random() - 0.5) * 19, 
+    0.4, 
+    (Math.random() - 0.5) * 19
+  );
+  powerPellet.castShadow = true;
+  powerPellet.receiveShadow = true;
+  scene.add(powerPellet);
+  powerPelletSpawned = true;
+}
+
+function spawnGhost() {
+  if (ghostSpawned || waveNumber < 1) return;
+  
+  // Use loaded model if available, otherwise fallback to cylinder
+  if (ghostModel) {
+    ghost = ghostModel.clone(true);
+    
+    // Calculate the original bounding box
+    const originalBox = new THREE.Box3().setFromObject(ghost);
+    const originalSize = originalBox.getSize(new THREE.Vector3());
+    
+    // Target dimensions to match cylinder (radius=1, height=2)
+    const targetWidth = 2; // diameter of cylinder
+    const targetHeight = 2; // height of cylinder
+    
+    // Calculate scale factors to match cylinder dimensions
+    const scaleX = targetWidth / originalSize.x;
+    const scaleY = targetHeight / originalSize.y;
+    const scaleZ = targetWidth / originalSize.z;
+    
+    // Use uniform scaling based on the smallest scale to maintain proportions
+    const uniformScale = Math.min(scaleX, scaleY, scaleZ);
+    ghost.scale.set(uniformScale, uniformScale, uniformScale);
+    
+    // Recalculate bounding box after scaling
+    const scaledBox = new THREE.Box3().setFromObject(ghost);
+    const scaledSize = scaledBox.getSize(new THREE.Vector3());
+    const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+    
+    // Position so the bottom of the model sits on the ground
+    // Account for the model's center offset and place it properly above ground
+    ghost.position.y = scaledSize.y * 0.5 + Math.abs(scaledCenter.y); // ensure bottom is at y=0
+  } else {
+    ghost = new THREE.Mesh(ghostGeometry, ghostMaterial);
+    ghost.position.y = 1.0; // cylinder center height (radius=1, so center at y=1)
+  }
+  
+  // Spawn at edge of play area
+  const angle = Math.random() * Math.PI * 2;
+  const distance = 15;
+  ghost.position.x = Math.cos(angle) * distance;
+  ghost.position.z = Math.sin(angle) * distance;
+  
+  ghost.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+  
+  // For fallback cylinder, set shadows directly
+  if (!ghostModel) {
+    ghost.castShadow = true;
+    ghost.receiveShadow = true;
+  }
+  
+  scene.add(ghost);
+  ghostSpawned = true;
+}
+
+function updateGhost() {
+  if (!ghost) return;
+  
+  const player = playerModel || playerCube;
+  if (!player) return;
+  
+  // Ensure ghost exists in scene
+  if (!scene.children.includes(ghost)) {
+    console.warn("Ghost not in scene, re-adding");
+    scene.add(ghost);
+  }
+  
+  // Chase the player
+  const direction = new THREE.Vector3();
+  direction.subVectors(player.position, ghost.position);
+  direction.normalize();
+  
+  // Move ghost towards player
+  const newPosition = ghost.position.clone();
+  newPosition.addScaledVector(direction, ghostSpeed);
+  
+  // Maintain proper height - ensure ghost stays above ground
+  let minHeight = 1.0; // default for cylinder
+  if (ghostModel && ghost.children.length > 0) {
+    // For GLTF model, calculate proper height to keep bottom above ground
+    const box = new THREE.Box3().setFromObject(ghost);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    minHeight = size.y * 0.5 + Math.abs(center.y); // ensure bottom doesn't go below ground
+  }
+  
+  newPosition.y = Math.max(minHeight, newPosition.y);
+  
+  // Apply the new position
+  ghost.position.copy(newPosition);
+  
+  // Rotate to face player - use same method for both since they're now the same size
+  const lookAtPosition = player.position.clone();
+  lookAtPosition.y = ghost.position.y;
+  ghost.lookAt(lookAtPosition);
+  
+  // Check collision with player
+  if (checkCollision(ghost, player)) {
+    // Game over
+    scene.remove(player);
+    createExplosion(player.position.clone());
+  }
 }
 
 function isInScene(object) {
@@ -647,6 +930,24 @@ function isInScene(object) {
 function checkCollision(obj1, obj2) {
   if (!obj1 || !obj2) return false;
   if (!isInScene(obj1) || !isInScene(obj2)) return false;
+  
+  // Special handling for ghost - only prevent collision with falling objects, not followers
+  if ((obj1 === ghost || obj2 === ghost) && obj1 !== obj2) {
+    // Allow ghost collision with player and followers
+    const player = playerModel || playerCube;
+    const isPlayerCollision = (obj1 === ghost && obj2 === player) || (obj1 === player && obj2 === ghost);
+    const isFollowerCollision = (obj1 === ghost && followers.includes(obj2)) || (followers.includes(obj1) && obj2 === ghost);
+    
+    if (isPlayerCollision || isFollowerCollision) {
+      const box1 = new THREE.Box3().setFromObject(obj1);
+      const box2 = new THREE.Box3().setFromObject(obj2);
+      return box1.intersectsBox(box2);
+    }
+    
+    // Prevent collision with falling objects (cones and bombs)
+    return false;
+  }
+  
   const box1 = new THREE.Box3().setFromObject(obj1);
   const box2 = new THREE.Box3().setFromObject(obj2);
   return box1.intersectsBox(box2);
@@ -699,14 +1000,47 @@ function animate(time = 0) {
     return;
   }
 
-  // Spawn followers after delay
-  if (!followersSpawned && time - gameStartTime > followerSpawnDelay) {
+  // Spawn followers after delay (only if protection is active)
+  if (!followersSpawned && protectionActive && time - gameStartTime > followerSpawnDelay) {
     spawnFollowers();
+  }
+  
+  // Spawn ghost after level 1 (for debugging)
+  if (!ghostSpawned && waveNumber >= 1) {
+    spawnGhost();
   }
   
   // Update followers
   if (followersSpawned) {
     updateFollowers(time);
+  }
+  
+  // Update ghost
+  if (ghostSpawned && ghost) {
+    updateGhost();
+    
+    // Dynamic height check based on model type
+    let minAllowedHeight = 0.5; // default minimum
+    if (ghostModel && ghost.children.length > 0) {
+      // For GLTF model, calculate proper minimum height to keep bottom above ground
+      const box = new THREE.Box3().setFromObject(ghost);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      minAllowedHeight = size.y * 0.5 + Math.abs(center.y); // bottom should be at y=0 minimum
+    }
+    
+    if (ghost.position.y < minAllowedHeight) {
+      console.warn("Ghost below ground, repositioning");
+      // Reset to proper spawn height
+      if (ghostModel && ghost.children.length > 0) {
+        const box = new THREE.Box3().setFromObject(ghost);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        ghost.position.y = size.y * 0.5 + Math.abs(center.y); // proper ground positioning
+      } else {
+        ghost.position.y = 1.0; // cylinder center height
+      }
+    }
   }
 
   const speed = 0.25;
@@ -770,13 +1104,28 @@ if (!player || !scene.children.includes(player)) {
       scoreDiv.textContent = `Score: ${score}`;
     }
   }
+  
+  // Check power pellet collision
+  if (powerPellet && checkCollision(playerModel || playerCube, powerPellet)) {
+    scene.remove(powerPellet);
+    powerPellet = null;
+    powerPelletSpawned = false; // Reset flag so new pellet can spawn next wave
+    protectionActive = true;
+    // Trigger follower spawn if protection is activated
+    if (waveNumber >= 1 && !followersSpawned) {
+      setTimeout(() => spawnFollowers(), 1000); // small delay for effect
+    }
+  }
 
   if (collectibles.length === 0) {
     waveNumber++;
+    // Don't reset protection status - let it carry over
+    // Don't reset followersSpawned - let them carry over
     spawnWave(waveNumber);
   }
 
-  if (time > 3000 && time - lastConeSpawn > coneSpawnInterval) {
+  // Start falling objects after 5 seconds (was 3 seconds)
+  if (time > 5000 && time - lastConeSpawn > coneSpawnInterval) {
     spawnCone();
     spawnBomb();
     lastConeSpawn = time;
@@ -785,14 +1134,33 @@ if (!player || !scene.children.includes(player)) {
   for (let i = cones.length - 1; i >= 0; i--) {
     const cone = cones[i];
     cone.position.y -= coneFallSpeed;
+    
+    // Update shadow indicator based on height
+    if (cone.userData.shadowIndicator) {
+      const heightRatio = cone.position.y / cone.userData.maxHeight;
+      const shadowOpacity = Math.max(0.1, 0.8 * (1 - heightRatio)); // gets darker as it falls
+      const shadowSize = 0.5 + (1 - heightRatio) * 0.3; // gets slightly larger as it approaches
+      
+      cone.userData.shadowIndicator.material.opacity = shadowOpacity;
+      cone.userData.shadowIndicator.scale.setScalar(shadowSize);
+    }
+    
     if (cone.position.y < 0) {
       scene.remove(cone);
+      // Remove shadow indicator
+      if (cone.userData.shadowIndicator) {
+        scene.remove(cone.userData.shadowIndicator);
+      }
       cones.splice(i, 1);
       continue;
     }
     if (checkCollision(playerModel || playerCube, cone)) {
       scene.remove(playerModel || playerCube);
       scene.remove(cone);
+      // Remove shadow indicator
+      if (cone.userData.shadowIndicator) {
+        scene.remove(cone.userData.shadowIndicator);
+      }
       cones.splice(i, 1);
       createExplosion((playerModel || playerCube).position.clone());
       break;
@@ -802,15 +1170,34 @@ if (!player || !scene.children.includes(player)) {
   for (let i = bombs.length - 1; i >= 0; i--) {
     const bomb = bombs[i];
     bomb.position.y -= coneFallSpeed;
+    
+    // Update shadow indicator based on height
+    if (bomb.userData.shadowIndicator) {
+      const heightRatio = bomb.position.y / bomb.userData.maxHeight;
+      const shadowOpacity = Math.max(0.1, 0.8 * (1 - heightRatio)); // gets darker as it falls
+      const shadowSize = 0.8 + (1 - heightRatio) * 0.4; // gets larger as it approaches
+      
+      bomb.userData.shadowIndicator.material.opacity = shadowOpacity;
+      bomb.userData.shadowIndicator.scale.setScalar(shadowSize);
+    }
+    
     if (bomb.position.y < 0) {
       scene.remove(bomb);
+      // Remove shadow indicator
+      if (bomb.userData.shadowIndicator) {
+        scene.remove(bomb.userData.shadowIndicator);
+      }
       bombs.splice(i, 1);
       continue;
     }
-    if (time < 3000) continue;
+    if (time < 5000) continue; // Don't check bomb collisions until 5 seconds have passed
     if (checkCollision(playerModel || playerCube, bomb)) {
       scene.remove(playerModel || playerCube);
       scene.remove(bomb);
+      // Remove shadow indicator
+      if (bomb.userData.shadowIndicator) {
+        scene.remove(bomb.userData.shadowIndicator);
+      }
       bombs.splice(i, 1);
       createExplosion((playerModel || playerCube).position.clone());
       break;
@@ -823,7 +1210,7 @@ if (!player || !scene.children.includes(player)) {
 setTimeout(() => {
   spawnWave(waveNumber);
   gameStartTime = performance.now(); // Initialize game start time
-}, 3000);
+}, 5000); // Changed from 3000 to 5000 for 5 second delay
 
 animate();
 
