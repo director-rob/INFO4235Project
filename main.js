@@ -1,16 +1,21 @@
-// main.js
+// main.js - 3D Game with Three.js featuring car movement, falling objects, ghosts, and follower protection system
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
+// Initialize the 3D scene
 const scene = new THREE.Scene();
+
+// Load and set sky background texture
 const loader = new THREE.TextureLoader();
 loader.load('sky.jpg', (texture) => {
   scene.background = texture;
 });
 
+// Set up perspective camera with 75-degree field of view
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 5, 15);
+camera.position.set(0, 5, 15); // Position camera above and behind the player
 
+// Initialize WebGL renderer with antialiasing and shadow support
 const renderer = new THREE.WebGLRenderer({
   canvas: document.getElementById('three-canvas'),
   antialias: true,
@@ -18,11 +23,13 @@ const renderer = new THREE.WebGLRenderer({
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap; // soft shadows
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Enable soft shadows for better visual quality
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); // softer intensity
+// Create main directional light (simulates sunlight)
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); // White light with moderate intensity
 directionalLight.position.set(10, 15, 5);
 directionalLight.castShadow = true;
+// Configure shadow camera for optimal shadow quality
 directionalLight.shadow.mapSize.width = 2048;
 directionalLight.shadow.mapSize.height = 2048;
 directionalLight.shadow.camera.near = 0.5;
@@ -31,62 +38,67 @@ directionalLight.shadow.camera.left = -25;
 directionalLight.shadow.camera.right = 25;
 directionalLight.shadow.camera.top = 25;
 directionalLight.shadow.camera.bottom = -25;
-directionalLight.shadow.radius = 10; // soft shadow blur
-directionalLight.shadow.blurSamples = 25; // even softer
+directionalLight.shadow.radius = 10; // Soft shadow blur radius
+directionalLight.shadow.blurSamples = 25; // Additional blur samples for softer shadows
 scene.add(directionalLight);
 
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // slightly brighter ambient
+// Add ambient light to brighten the overall scene
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // Soft white ambient light
 scene.add(ambientLight);
 
-// Add a soft fill light from the opposite side
+// Add fill light from opposite side to reduce harsh shadows
 const fillLight = new THREE.DirectionalLight(0xffffff, 0.2);
 fillLight.position.set(-10, 10, -5);
 scene.add(fillLight);
 
-// Extended map and tile system constants
-const mapSize = 200; // much larger map
-const tileSize = 10;
+// Map and tile system configuration
+const mapSize = 200; // Total map size for extended terrain
+const tileSize = 10; // Size of each procedural tile
 
-// Main play area ground - baby blue
+// Create main play area ground with baby blue color
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(20, 20),
-  new THREE.MeshStandardMaterial({ color: 0x87CEEB }) // baby blue
+  new THREE.MeshStandardMaterial({ color: 0x87CEEB }) // Baby blue color
 );
-ground.rotation.x = -Math.PI / 2;
-ground.receiveShadow = true; // ground receives shadows
+ground.rotation.x = -Math.PI / 2; // Rotate to lie flat on XZ plane
+ground.receiveShadow = true; // Allow shadows to be cast on the ground
 scene.add(ground);
 
-// Extended base terrain - baby blue
+// Create extended base terrain for larger world exploration
 const baseTerrain = new THREE.Mesh(
   new THREE.PlaneGeometry(mapSize * 2, mapSize * 2),
-  new THREE.MeshStandardMaterial({ color: 0x87CEEB }) // baby blue to match
+  new THREE.MeshStandardMaterial({ color: 0x87CEEB }) // Matching baby blue color
 );
 baseTerrain.rotation.x = -Math.PI / 2;
-baseTerrain.position.y = -0.1; // slightly below main ground
-baseTerrain.receiveShadow = true; // terrain receives shadows
+baseTerrain.position.y = -0.1; // Position slightly below main ground to avoid z-fighting
+baseTerrain.receiveShadow = true; // Enable shadow receiving
 scene.add(baseTerrain);
 
+// Create fallback player cube (used when GLTF model fails to load)
 const playerGeometry = new THREE.BoxGeometry(1, 1, 1);
-const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 }); // Green cube
 const playerCube = new THREE.Mesh(playerGeometry, playerMaterial);
-playerCube.position.y = 0.5;
-playerCube.castShadow = true; // cube also casts shadows (fallback)
-playerCube.receiveShadow = true;
+playerCube.position.y = 0.5; // Position cube so bottom sits on ground
+playerCube.castShadow = true; // Enable shadow casting
+playerCube.receiveShadow = true; // Enable shadow receiving
 scene.add(playerCube);
 
-let playerModel = null;
-let bombModel = null;
-let ghostModel = null;
+// Variables to store loaded 3D models
+let playerModel = null; // Will store the car model
+let bombModel = null;   // Will store the bomb model
+let ghostModel = null;  // Will store the ghost model
 
+// Initialize GLTF loaders for different models
 const gltfLoader = new GLTFLoader();
 const bombLoader = new GLTFLoader();
 const ghostLoader = new GLTFLoader();
+// Load car model as main player character
 gltfLoader.load('car/scene.gltf', (gltf) => {
   playerModel = gltf.scene;
-  playerModel.scale.set(0.7, 0.7, 0.7);
-  playerModel.position.set(0, 0, 0);
+  playerModel.scale.set(0.7, 0.7, 0.7); // Scale down the car model
+  playerModel.position.set(0, 0, 0); // Position at world origin
   
-  // Enable shadow casting for the car model
+  // Enable shadow casting and receiving for all meshes in the car model
   playerModel.traverse((child) => {
     if (child.isMesh) {
       child.castShadow = true;
@@ -95,13 +107,14 @@ gltfLoader.load('car/scene.gltf', (gltf) => {
   });
   
   scene.add(playerModel);
-  scene.remove(playerCube);
+  scene.remove(playerCube); // Remove fallback cube when car model loads successfully
 });
 
+// Load bomb model for falling objects
 bombLoader.load('bomb/scene.gltf', (gltf) => {
   bombModel = gltf.scene;
-  //bombModel.rotation.set(Math.PI, 0, 0);
-  bombModel.scale.set(0.01, 0.01, 0.01);
+  bombModel.scale.set(0.01, 0.01, 0.01); // Scale down bomb model significantly
+  // Enable shadows for all meshes in the bomb model
   bombModel.traverse((child) => {
     if (child.isMesh) {
       child.castShadow = true;
@@ -110,9 +123,11 @@ bombLoader.load('bomb/scene.gltf', (gltf) => {
   });
 });
 
+// Load ghost model for enemy characters
 ghostLoader.load('blinky_from_pacman.glb', (gltf) => {
   ghostModel = gltf.scene;
-  ghostModel.scale.set(0.5, 0.5, 0.5);
+  ghostModel.scale.set(0.5, 0.5, 0.5); // Scale ghost model appropriately
+  // Enable shadows for all meshes in the ghost model
   ghostModel.traverse((child) => {
     if (child.isMesh) {
       child.castShadow = true;
@@ -121,20 +136,24 @@ ghostLoader.load('blinky_from_pacman.glb', (gltf) => {
   });
 });
 
-// Change to arrow keys and add space for interaction
+// Input handling system using arrow keys and spacebar
 const keys = { 
-  ArrowUp: false, 
-  ArrowDown: false, 
-  ArrowLeft: false, 
-  ArrowRight: false,
-  ' ': false // space key for interaction
+  ArrowUp: false,    // Move forward
+  ArrowDown: false,  // Move backward
+  ArrowLeft: false,  // Move left
+  ArrowRight: false, // Move right
+  ' ': false         // Spacebar for interactions
 };
+
+// Handle key press events
 window.addEventListener('keydown', (e) => {
   if (e.key in keys) {
     keys[e.key] = true;
-    e.preventDefault(); // prevent scrolling with arrow keys
+    e.preventDefault(); // Prevent default browser behavior (scrolling with arrow keys)
   }
 });
+
+// Handle key release events
 window.addEventListener('keyup', (e) => {
   if (e.key in keys) {
     keys[e.key] = false;
@@ -142,77 +161,260 @@ window.addEventListener('keyup', (e) => {
   }
 });
 
-const scoreDiv = document.getElementById('score');
-let score = 0;
-let waveNumber = 1;
+// Game state variables
+const scoreDiv = document.getElementById('score'); // Reference to score display element
+let score = 0;        // Player's current score
+let waveNumber = 1;   // Current wave/level number
 
-let collectibles = [], cones = [], bombs = [];
-const coneFallSpeed = 0.125; // half speed (was 0.25)
-const coneSpawnInterval = 400; // less dense (was 200)
-let gameOver = false;
+// Game object arrays
+let collectibles = []; // Red boxes to collect for points
+let cones = [];       // Orange falling cones that damage player
+let bombs = [];       // Falling bombs that damage player
 
-// Ghost system (after level 3)
-let ghost = null;
-let ghostSpawned = false;
-const ghostSpeed = 0.06; // much slower than player (was 0.12)
+// Falling object configuration
+const coneFallSpeed = 0.125;    // Speed at which objects fall
+const coneSpawnInterval = 400;  // Milliseconds between spawning falling objects
+let gameOver = false;           // Game state flag
+let gameStarted = false;        // Flag to track if game has actually started
 
-// Power pellet system
-let powerPellet = null;
-let powerPelletSpawned = false;
-let protectionActive = false;
+// Ghost enemy system variables
+let ghost = null;           // Current ghost instance
+let ghostSpawned = false;   // Flag to track if ghost is active
+const ghostSpeed = 0.06;    // Ghost movement speed (slower than player)
 
-// Follower mob system
-let followers = [];
-const followerSpawnDelay = 8000; // 8 seconds
-const followerSpeed = 0.15; // slower than player's 0.25
-let followersSpawned = false;
-let gameStartTime = 0;
+// Power pellet protection system variables
+let powerPellet = null;         // Current power pellet instance
+let powerPelletSpawned = false; // Flag to prevent multiple pellets
+let protectionActive = false;   // Flag indicating if player has protection
 
-// Camera drag functionality
-let isDragging = false;
-let previousMousePosition = { x: 0, y: 0 };
-let cameraOffset = new THREE.Vector3(5, 10, 8);
-let isFollowingPlayer = true;
-let cameraTarget = new THREE.Vector3(0, 0, 0); // Where the camera is looking
+// Follower mob protection system variables
+let followers = [];                    // Array of follower entities that protect player
+const followerSpawnDelay = 8000;      // Delay before followers spawn after protection activation
+const followerSpeed = 0.15;           // Follower movement speed
+let followersSpawned = false;          // Flag to control follower spawning
+let gameStartTime = 0;                 // Timestamp when game started
 
-// Tile storage and interactive tiles
-const tiles = new Map(); // store generated tiles
-const interactiveTiles = []; // tiles that can be clicked/interacted with
-let currentPlayerTile = null; // track the tile the player is currently on
-let previousPlayerTileKey = null; // track previous tile to reset it
+// Camera control system variables
+let isDragging = false;                                      // Flag for mouse drag state
+let previousMousePosition = { x: 0, y: 0 };                 // Last mouse position for drag calculations
+let cameraOffset = new THREE.Vector3(5, 10, 8);             // Camera position relative to player
+let isFollowingPlayer = true;                                // Flag for camera follow mode
 
-// Tile types and their associated websites
+// Leaderboard system variables
+let playerName = '';                     // Player's name for leaderboard
+let currentLeaderboard = [];             // Current leaderboard data
+let leaderboardContainer = null;         // Reference to leaderboard display
+let nameInputContainer = null;           // Reference to name input UI
+const SERVER_URL = 'http://localhost:3001/api'; // Backend server API URL
+
+// Leaderboard API functions
+// Fetch current leaderboard from server
+async function fetchLeaderboard() {
+  try {
+    const response = await fetch(`${SERVER_URL}/leaderboard`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.leaderboard) {
+        currentLeaderboard = data.leaderboard;
+        return currentLeaderboard;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to fetch leaderboard:', error);
+  }
+  return [];
+}
+
+// Submit score to server leaderboard
+async function submitScore(name, score) {
+  try {
+    const response = await fetch(`${SERVER_URL}/leaderboard`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        playerName: name, 
+        score: score, 
+        wave: waveNumber 
+      }),
+    });
+    if (response.ok) {
+      return await response.json();
+    }
+  } catch (error) {
+    console.error('Failed to submit score:', error);
+  }
+  return null;
+}
+
+// Show name input dialog before game starts
+function showNameInput() {
+  if (nameInputContainer) return; // Prevent multiple dialogs
+
+  nameInputContainer = document.createElement('div');
+  nameInputContainer.style.cssText = `
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.9); padding: 30px; border-radius: 10px;
+    color: white; font-family: Arial, sans-serif; text-align: center;
+    z-index: 1000; min-width: 300px;
+  `;
+
+  nameInputContainer.innerHTML = `
+    <h2>Enter Your Name</h2>
+    <input type="text" id="playerNameInput" placeholder="Your name..." maxlength="20" 
+           style="padding: 10px; font-size: 16px; border: none; border-radius: 5px; margin: 10px; width: 200px;">
+    <br>
+    <button id="startGameBtn" style="padding: 10px 20px; font-size: 16px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
+      Start Game
+    </button>
+    <button id="skipNameBtn" style="padding: 10px 20px; font-size: 16px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
+      Skip
+    </button>
+  `;
+
+  document.body.appendChild(nameInputContainer);
+
+  const nameInput = document.getElementById('playerNameInput');
+  const startBtn = document.getElementById('startGameBtn');
+  const skipBtn = document.getElementById('skipNameBtn');
+
+  // Handle start game with name
+  startBtn.addEventListener('click', () => {
+    playerName = nameInput.value.trim() || 'Anonymous';
+    hideNameInput();
+    startGame();
+  });
+
+  // Handle skip name entry
+  skipBtn.addEventListener('click', () => {
+    playerName = 'Anonymous';
+    hideNameInput();
+    startGame();
+  });
+
+  // Handle Enter key
+  nameInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      startBtn.click();
+    }
+  });
+
+  nameInput.focus();
+}
+
+// Hide name input dialog
+function hideNameInput() {
+  if (nameInputContainer) {
+    document.body.removeChild(nameInputContainer);
+    nameInputContainer = null;
+  }
+}
+
+// Show leaderboard display
+async function showLeaderboard() {
+  console.log('showLeaderboard called'); // Debug log
+  await fetchLeaderboard();
+  console.log('Current leaderboard data:', currentLeaderboard); // Debug log
+  
+  if (leaderboardContainer) return; // Prevent multiple displays
+
+  leaderboardContainer = document.createElement('div');
+  leaderboardContainer.style.cssText = `
+    position: fixed; top: 50%; right: 50px; transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.9); padding: 20px; border-radius: 10px;
+    color: white; font-family: Arial, sans-serif; min-width: 280px;
+    max-height: 400px; overflow-y: auto; z-index: 100;
+    border: 2px solid #FF9800; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  `;
+
+  let leaderboardHTML = '<h3 style="margin-top: 0; color: #FF9800; text-align: center;">🏆 Leaderboard</h3>';
+  if (currentLeaderboard.length === 0) {
+    leaderboardHTML += '<p style="text-align: center; color: #ccc;">No scores yet!</p>';
+  } else {
+    leaderboardHTML += '<div style="margin: 10px 0;">';
+    currentLeaderboard.slice(0, 10).forEach((entry, index) => {
+      const isCurrentPlayer = entry.playerName === playerName && Math.abs(entry.score - score) < 0.01;
+      const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+      const style = isCurrentPlayer ? 'color: gold; font-weight: bold; background: rgba(255,215,0,0.2); padding: 5px; border-radius: 3px;' : 'padding: 5px;';
+      leaderboardHTML += `
+        <div style="${style} margin: 3px 0; display: flex; justify-content: space-between;">
+          <span>${medal} ${entry.playerName}</span>
+          <span style="color: #4CAF50; font-weight: bold;">${entry.score}</span>
+        </div>
+      `;
+    });
+    leaderboardHTML += '</div>';
+  }
+
+  leaderboardHTML += '<div style="text-align: center; margin-top: 15px;"><button onclick="toggleLeaderboard()" style="padding: 8px 15px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">Close</button></div>';
+
+  leaderboardContainer.innerHTML = leaderboardHTML;
+  document.body.appendChild(leaderboardContainer);
+}
+
+// Hide leaderboard display
+function hideLeaderboard() {
+  if (leaderboardContainer) {
+    document.body.removeChild(leaderboardContainer);
+    leaderboardContainer = null;
+  }
+}
+
+// Toggle leaderboard display (for the button)
+async function toggleLeaderboard() {
+  console.log('Leaderboard button clicked!'); // Debug log
+  if (leaderboardContainer) {
+    hideLeaderboard();
+  } else {
+    await showLeaderboard();
+  }
+}
+
+// Make toggleLeaderboard globally available for the HTML button
+window.toggleLeaderboard = toggleLeaderboard;
+let cameraTarget = new THREE.Vector3(0, 0, 0);              // Point where camera looks
+
+// Tile system variables for procedural world generation
+const tiles = new Map();           // Storage for generated world tiles
+const interactiveTiles = [];       // Array of tiles that can be clicked
+let currentPlayerTile = null;      // Current tile player is standing on
+let previousPlayerTileKey = null;  // Previous tile for reset purposes
+
+// Interactive tile types with associated websites
 const tileTypes = [
-  { color: 0x4CAF50, website: 'https://threejs.org', name: 'Three.js' },
-  { color: 0x2196F3, website: 'https://github.com', name: 'GitHub' },
+  { color: 0x4CAF50, website: 'https://threejs.org', name: 'Three.js' },  // Green tile links to Three.js
+  { color: 0x2196F3, website: 'https://github.com', name: 'GitHub' },     // Blue tile links to GitHub
 ];
 
-// Mouse event handlers for camera dragging
+// Mouse event listeners for camera dragging and tile interaction
 const canvas = document.getElementById('three-canvas');
 canvas.addEventListener('mousedown', onMouseDown, false);
 canvas.addEventListener('mousemove', onMouseMove, false);
 canvas.addEventListener('mouseup', onMouseUp, false);
 canvas.addEventListener('click', onMouseClick, false);
 
+// Handle mouse press for camera dragging
 function onMouseDown(event) {
   isDragging = true;
-  isFollowingPlayer = false;
+  isFollowingPlayer = false; // Disable automatic camera following
   previousMousePosition = {
     x: event.clientX,
     y: event.clientY
   };
 }
 
+// Handle mouse movement for camera panning
 function onMouseMove(event) {
   if (!isDragging) return;
   
+  // Calculate mouse movement delta
   const deltaMove = {
     x: event.clientX - previousMousePosition.x,
     y: event.clientY - previousMousePosition.y
   };
   
-  // Pan the camera by moving the target position
-  // Calculate the camera's right and up vectors
+  // Calculate camera orientation vectors for proper panning
   const camera_direction = new THREE.Vector3();
   camera.getWorldDirection(camera_direction);
   
@@ -222,16 +424,15 @@ function onMouseMove(event) {
   const camera_up = new THREE.Vector3();
   camera_up.crossVectors(camera_direction, camera_right).normalize();
   
-  // Pan speed factor
-  const panSpeed = 0.05;
+  const panSpeed = 0.05; // Camera panning sensitivity
   
-  // Move the camera target based on mouse movement
+  // Apply mouse movement to camera target position
   const panX = camera_right.clone().multiplyScalar(-deltaMove.x * panSpeed);
   const panY = camera_up.clone().multiplyScalar(deltaMove.y * panSpeed);
   
   cameraTarget.add(panX).add(panY);
   
-  // Update camera position to maintain the same offset from the new target
+  // Update camera position to maintain offset from new target
   camera.position.copy(cameraTarget).add(cameraOffset);
   camera.lookAt(cameraTarget);
   
@@ -241,88 +442,193 @@ function onMouseMove(event) {
   };
 }
 
+// Handle mouse release to stop camera dragging
 function onMouseUp() {
   isDragging = false;
 }
 
+// Handle mouse clicks for tile interactions
 function onMouseClick(event) {
-  // Only process clicks if we weren't dragging
+  // Only process clicks if we weren't dragging the camera
   if (!isDragging) {
-    // Raycast to detect tile clicks
+    // Convert mouse coordinates to normalized device coordinates
     const mouse = new THREE.Vector2();
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
     
+    // Create raycaster to detect which tile was clicked
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(mouse, camera);
     
+    // Check for intersections with interactive tiles
     const intersects = raycaster.intersectObjects(interactiveTiles);
     if (intersects.length > 0) {
       const tile = intersects[0].object;
       if (tile.userData.website) {
-        window.open(tile.userData.website, '_blank');
+        window.open(tile.userData.website, '_blank'); // Open associated website
       }
     }
   }
 }
 
-const coneGeometry = new THREE.ConeGeometry(0.3, 1, 8);
+// Geometry and materials for game objects
+const coneGeometry = new THREE.ConeGeometry(0.3, 1, 8);                    // Orange falling cones
 const coneMaterial = new THREE.MeshStandardMaterial({ color: 0xffa500 });
 
-// Follower mob geometry and material
+// Follower mob appearance (friendly green cylinders)
 const followerGeometry = new THREE.CylinderGeometry(0.4, 0.4, 1, 8);
 const followerMaterial = new THREE.MeshStandardMaterial({ 
-  color: 0x44ff44, // friendly green instead of red
-  emissive: 0x003300,
-  emissiveIntensity: 0.2
+  color: 0x44ff44,           // Bright green color
+  emissive: 0x003300,        // Dark green emissive
+  emissiveIntensity: 0.2     // Subtle glow effect
 });
 
-// Power pellet geometry and material
+// Power pellet appearance (bright green boxes)
 const powerPelletGeometry = new THREE.BoxGeometry(1.5, 0.8, 1.5);
 const powerPelletMaterial = new THREE.MeshStandardMaterial({ 
-  color: 0x00ff00, // bright green
-  emissive: 0x004400,
-  emissiveIntensity: 0.3
+  color: 0x00ff00,           // Bright green color
+  emissive: 0x004400,        // Dark green emissive
+  emissiveIntensity: 0.3     // Noticeable glow effect
 });
 
-// Ghost fallback geometry and material
+// Ghost fallback appearance (red cylinders when model fails to load)
 const ghostGeometry = new THREE.CylinderGeometry(1, 1, 2, 16);
 const ghostMaterial = new THREE.MeshStandardMaterial({ 
-  color: 0xff4444, // red ghost
-  emissive: 0x440000,
-  emissiveIntensity: 0.3
+  color: 0xff4444,           // Red color for danger
+  emissive: 0x440000,        // Dark red emissive
+  emissiveIntensity: 0.3     // Threatening glow effect
 });
 
-const explosionParticles = [];
-const explosionDuration = 1000;
-let explosionStartTime = 0;
-let gameOverDiv = null;
+// Explosion particle system variables
+const explosionParticles = [];  // Array to store explosion particle objects
+const explosionDuration = 1000; // How long explosion lasts in milliseconds
+let explosionStartTime = 0;     // Timestamp when explosion started
+let gameOverDiv = null;         // Reference to game over display element
 
-function showGameOver() {
-  if (gameOverDiv) return;
+// Display game over screen with leaderboard submission
+async function showGameOver() {
+  if (gameOverDiv) return; // Prevent multiple game over screens
+
+  // Submit score to leaderboard if player has a name
+  if (playerName && playerName !== 'Anonymous') {
+    await submitScore(playerName, score);
+  }
+
   gameOverDiv = document.createElement('div');
-  gameOverDiv.style = `position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: red; font-size: 36px; font-weight: bold; user-select: none; text-align: center;`;
-  gameOverDiv.innerHTML = 'GAME OVER<br>(press R to restart)';
+  gameOverDiv.style = `position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                       background: rgba(0, 0, 0, 0.9); padding: 30px; border-radius: 10px;
+                       color: red; font-size: 24px; font-weight: bold; user-select: none; text-align: center;
+                       min-width: 400px; z-index: 1000;`;
+  
+  let gameOverHTML = `
+    <h2 style="color: red; margin-top: 0;">GAME OVER</h2>
+    <p style="color: white; font-size: 18px;">Final Score: ${score}</p>
+  `;
+
+  // Show name input for leaderboard if player is anonymous
+  if (!playerName || playerName === 'Anonymous') {
+    gameOverHTML += `
+      <p style="color: white; font-size: 16px;">Enter your name for the leaderboard:</p>
+      <input type="text" id="gameOverNameInput" placeholder="Your name..." maxlength="20" 
+             style="padding: 10px; font-size: 16px; border: none; border-radius: 5px; margin: 10px; width: 200px;">
+      <br>
+      <button id="submitScoreBtn" style="padding: 10px 20px; font-size: 16px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
+        Submit Score
+      </button>
+    `;
+  }
+
+  gameOverHTML += `
+    <br>
+    <button id="restartBtn" style="padding: 10px 20px; font-size: 16px; background: #2196F3; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
+      Restart Game
+    </button>
+    <button id="viewLeaderboardBtn" style="padding: 10px 20px; font-size: 16px; background: #FF9800; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
+      View Leaderboard
+    </button>
+  `;
+
+  gameOverDiv.innerHTML = gameOverHTML;
   document.body.appendChild(gameOverDiv);
+
+  // Set up event listeners
+  const restartBtn = document.getElementById('restartBtn');
+  const leaderboardBtn = document.getElementById('viewLeaderboardBtn');
+  const submitBtn = document.getElementById('submitScoreBtn');
+  const nameInput = document.getElementById('gameOverNameInput');
+
+  restartBtn.addEventListener('click', () => {
+    hideLeaderboard();
+    restartGame();
+  });
+
+  leaderboardBtn.addEventListener('click', showLeaderboard);
+
+  if (submitBtn && nameInput) {
+    submitBtn.addEventListener('click', async () => {
+      const name = nameInput.value.trim();
+      if (name) {
+        playerName = name;
+        await submitScore(name, score);
+        // Update the game over screen to remove the input
+        showGameOver();
+      }
+    });
+
+    nameInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        submitBtn.click();
+      }
+    });
+  }
 }
 
-function restartGame() {
-  if (gameOverDiv) document.body.removeChild(gameOverDiv);
-  gameOverDiv = null;
-  explosionParticles.forEach(p => scene.remove(p));
-  explosionParticles.length = 0;
+// Start a new game (called when game begins)
+function startGame() {
+  // Reset all game state
   score = 0;
   waveNumber = 1;
   gameOver = false;
+  gameStarted = true;
+  gameStartTime = performance.now();
+  
+  // Update score display
+  scoreDiv.textContent = `Score: ${score}`;
+  
+  // Hide any UI elements
+  hideLeaderboard();
+  hideNameInput();
+  
+  // Spawn the first wave
+  spawnWave(waveNumber);
+}
+
+// Reset all game systems to initial state
+function restartGame() {
+  // Clean up UI elements
+  if (gameOverDiv) document.body.removeChild(gameOverDiv);
+  gameOverDiv = null;
+  hideLeaderboard();
+  hideNameInput();
+  
+  // Remove all explosion particles from scene
+  explosionParticles.forEach(p => scene.remove(p));
+  explosionParticles.length = 0;
+  
+  // Reset core game state
+  score = 0;
+  waveNumber = 1;
+  gameOver = false;
+  gameStarted = true;
   lastConeSpawn = 0;
   
-  // Reset follower system
+  // Reset follower protection system
   followers.forEach(f => scene.remove(f));
   followers.length = 0;
   followersSpawned = false;
   gameStartTime = performance.now();
   
-  // Reset ghost system completely
+  // Reset ghost enemy system
   if (ghost) {
     scene.remove(ghost);
     ghost = null;
@@ -337,9 +643,14 @@ function restartGame() {
   powerPelletSpawned = false;
   protectionActive = false;
   
+  // Update score display and clear all game objects
   scoreDiv.textContent = `Score: ${score}`;
+  
+  // Remove all collectibles
   collectibles.forEach(c => scene.remove(c));
   collectibles.length = 0;
+  
+  // Remove all falling cones and their shadow indicators
   cones.forEach(c => {
     scene.remove(c);
     if (c.userData.shadowIndicator) {
@@ -347,6 +658,8 @@ function restartGame() {
     }
   });
   cones.length = 0;
+  
+  // Remove all falling bombs and their shadow indicators
   bombs.forEach(b => {
     scene.remove(b);
     if (b.userData.shadowIndicator) {
@@ -354,12 +667,19 @@ function restartGame() {
     }
   });
   bombs.length = 0;
+  
+  // Reset player position to world origin
   (playerModel || playerCube).position.set(0, playerModel ? 0 : 0.5, 0);
+  
+  // Ensure player model is in scene
   if (playerModel) scene.add(playerModel);
   else if (!scene.children.includes(playerCube)) scene.add(playerCube);
+  
+  // Start first wave
   spawnWave(waveNumber);
 }
 
+// Listen for restart key when game is over
 window.addEventListener('keydown', (e) => {
   if (gameOver && (e.key === 'r' || e.key === 'R')) {
     e.preventDefault();
@@ -367,32 +687,36 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// Generate tiles around the player
+// Procedurally generate world tiles around the player's position
 function generateTilesAroundPlayer() {
   const player = playerModel || playerCube;
+  // Calculate which tile grid the player is currently in
   const playerX = Math.floor(player.position.x / tileSize);
   const playerZ = Math.floor(player.position.z / tileSize);
   
-  const renderDistance = 20; // tiles around player
+  const renderDistance = 20; // Number of tiles to render around player
   
+  // Generate tiles in a square grid around the player
   for (let x = playerX - renderDistance; x <= playerX + renderDistance; x++) {
     for (let z = playerZ - renderDistance; z <= playerZ + renderDistance; z++) {
       const tileKey = `${x},${z}`;
       
       if (!tiles.has(tileKey)) {
-        // Skip the main play area (center tiles)
+        // Skip generating tiles in the main play area to avoid overlap
         if (Math.abs(x) <= 2 && Math.abs(z) <= 2) continue;
         
+        // Calculate world position for this tile
         const tileX = x * tileSize;
         const tileZ = z * tileSize;
         
-        // Randomly decide if this should be an interactive tile
-        const isInteractive = Math.random() < 0.1; // 10% chance
+        // Randomly determine if this tile should be interactive
+        const isInteractive = Math.random() < 0.1; // 10% chance for interactive tiles
         
         let tileMaterial;
         let tileData = { website: null, name: null };
         
         if (isInteractive) {
+          // Create interactive tile with associated website
           const tileType = tileTypes[Math.floor(Math.random() * tileTypes.length)];
           tileMaterial = new THREE.MeshStandardMaterial({ 
             color: tileType.color,
@@ -401,28 +725,29 @@ function generateTilesAroundPlayer() {
           });
           tileData = { website: tileType.website, name: tileType.name, isInteractive: true };
         } else {
-          // Regular landscape tile - baby blue variations
-          const blueVariation = Math.floor(Math.random() * 0x222222); // subtle variation
-          const babyBlue = 0x87CEEB + blueVariation - 0x111111; // slight variations around baby blue
+          // Create regular landscape tile with color variation
+          const blueVariation = Math.floor(Math.random() * 0x222222); // Subtle color variation
+          const babyBlue = 0x87CEEB + blueVariation - 0x111111; // Variations around baby blue
           tileMaterial = new THREE.MeshStandardMaterial({ color: babyBlue });
           tileData = { website: null, name: null, isInteractive: false };
         }
         
+        // Create and position the tile
         const tileGeometry = new THREE.PlaneGeometry(tileSize, tileSize);
         const tile = new THREE.Mesh(tileGeometry, tileMaterial);
-        tile.rotation.x = -Math.PI / 2;
-        // Position tile at center of grid cell
-        tile.position.set(tileX + tileSize/2, 0, tileZ + tileSize/2);
+        tile.rotation.x = -Math.PI / 2; // Rotate to lie flat
+        tile.position.set(tileX + tileSize/2, 0, tileZ + tileSize/2); // Center in grid cell
         tile.userData = tileData;
         tile.receiveShadow = true;
         
         scene.add(tile);
         tiles.set(tileKey, tile);
         
+        // Add text label for interactive tiles
         if (isInteractive) {
           interactiveTiles.push(tile);
           
-          // Add a label above interactive tiles
+          // Create canvas texture for tile label
           const canvas = document.createElement('canvas');
           const context = canvas.getContext('2d');
           canvas.width = 256;
@@ -434,6 +759,7 @@ function generateTilesAroundPlayer() {
           context.textAlign = 'center';
           context.fillText(tileData.name, canvas.width / 2, canvas.height / 2 + 7);
           
+          // Create label mesh above the tile
           const texture = new THREE.CanvasTexture(canvas);
           const labelMaterial = new THREE.MeshBasicMaterial({ 
             map: texture, 
@@ -450,112 +776,121 @@ function generateTilesAroundPlayer() {
   }
 }
 
-// Check if player is on an interactive tile
+// Check if player is standing on an interactive tile and handle spacebar interaction
 function checkTileInteraction() {
   const player = playerModel || playerCube;
   
-  // Use the same calculation method as updatePlayerTile
+  // Calculate player's ground position (accounting for model center vs position)
   let playerGroundX, playerGroundZ;
   
   if (playerModel) {
-    // For the car model, calculate the bounding box center
+    // For car model, use bounding box center for accurate ground position
     const boundingBox = new THREE.Box3().setFromObject(playerModel);
     const center = boundingBox.getCenter(new THREE.Vector3());
     playerGroundX = center.x;
     playerGroundZ = center.z;
   } else {
-    // For the cube, use the position directly
+    // For cube fallback, use position directly
     playerGroundX = player.position.x;
     playerGroundZ = player.position.z;
   }
   
+  // Determine which tile the player is standing on
   const playerX = Math.floor(playerGroundX / tileSize);
   const playerZ = Math.floor(playerGroundZ / tileSize);
   const tileKey = `${playerX},${playerZ}`;
   
+  // Check if spacebar is pressed while on an interactive tile
   if (tiles.has(tileKey)) {
     const tile = tiles.get(tileKey);
     if (tile.userData.website && keys[' ']) {
-      window.open(tile.userData.website, '_blank');
-      keys[' '] = false; // prevent multiple opens
+      window.open(tile.userData.website, '_blank'); // Open associated website
+      keys[' '] = false; // Prevent multiple opens from single press
     }
   }
 }
 
-// Update current player tile with bobbing and glow effects
+// Update visual effects for the tile the player is currently standing on
 function updatePlayerTile(time) {
   const player = playerModel || playerCube;
   
-  // Get the player's actual ground position (accounting for model offset)
+  // Calculate accurate player ground position
   let playerGroundX, playerGroundZ;
   
   if (playerModel) {
-    // For the car model, calculate the bounding box center
+    // For car model, use bounding box center for precise positioning
     const boundingBox = new THREE.Box3().setFromObject(playerModel);
     const center = boundingBox.getCenter(new THREE.Vector3());
     playerGroundX = center.x;
     playerGroundZ = center.z;
   } else {
-    // For the cube, use the position directly
+    // For cube fallback, use direct position
     playerGroundX = player.position.x;
     playerGroundZ = player.position.z;
   }
   
-  // Calculate tile coordinates from the ground position
+  // Calculate which tile grid cell the player is in
   const playerX = Math.floor(playerGroundX / tileSize);
   const playerZ = Math.floor(playerGroundZ / tileSize);
   const tileKey = `${playerX},${playerZ}`;
   
-  // Reset previous tile if we moved to a new one
+  // Reset visual effects on previous tile when player moves
   if (previousPlayerTileKey && previousPlayerTileKey !== tileKey && tiles.has(previousPlayerTileKey)) {
     const prevTile = tiles.get(previousPlayerTileKey);
-    prevTile.position.y = 0; // reset height
+    prevTile.position.y = 0; // Reset height to ground level
     
-    // Reset material to original state
+    // Reset material to original appearance
     if (prevTile.userData.isInteractive) {
-      prevTile.material.emissiveIntensity = 0.2; // restore original emissive
+      prevTile.material.emissiveIntensity = 0.2; // Restore original glow
     } else {
-      prevTile.material.emissive.setHex(0x000000); // remove glow from regular tiles
+      prevTile.material.emissive.setHex(0x000000); // Remove glow from regular tiles
     }
   }
   
-  // Update current tile
+  // Apply visual effects to current tile
   if (tiles.has(tileKey)) {
     const tile = tiles.get(tileKey);
     currentPlayerTile = tile;
     
-    // Bobbing motion - keep it above ground level
-    const bobSpeed = 0.003;
-    const bobHeight = 0.15; // reduced height to prevent clipping
+    // Create gentle bobbing motion
+    const bobSpeed = 0.003;  // Animation speed
+    const bobHeight = 0.15;  // Maximum height of bobbing motion
     const bobOffset = Math.sin(time * bobSpeed) * bobHeight;
-    tile.position.y = Math.max(0, bobOffset); // never go below ground level
+    tile.position.y = Math.max(0, bobOffset); // Ensure tile never goes below ground
     
-    // Add glow effect
+    // Apply glowing effect based on tile type
     if (tile.userData.isInteractive) {
-      // Interactive tiles get enhanced glow with their original color
+      // Interactive tiles get enhanced pulsing glow with original color
       tile.material.emissiveIntensity = 0.4 + Math.sin(time * 0.005) * 0.1;
     } else {
-      // Regular tiles get bright blue glow
-      const glowIntensity = 0.3 + Math.sin(time * 0.005) * 0.5; // increased intensity
-      tile.material.emissive.setHex(0x4499FF); // brighter blue
+      // Regular tiles get bright blue glow when player stands on them
+      const glowIntensity = 0.3 + Math.sin(time * 0.005) * 0.5; // Pulsing effect
+      tile.material.emissive.setHex(0x4499FF); // Bright blue glow
       tile.material.emissiveIntensity = glowIntensity;
     }
   } else {
     currentPlayerTile = null;
   }
   
+  // Update tracking variable for next frame
   previousPlayerTileKey = tileKey;
 }
 
+// Create a new wave of collectibles and initialize wave-specific systems
 function spawnWave(waveNum) {
+  // Remove all existing collectibles from previous wave
   collectibles.forEach(c => scene.remove(c));
   collectibles.length = 0;
+  
+  // Create more collectibles for higher waves
   const count = 5 * waveNum;
   for (let i = 0; i < count; i++) {
+    // Create red collectible boxes
     const geo = new THREE.BoxGeometry(2, 0.5, 1);
     const mat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
     const collectible = new THREE.Mesh(geo, mat);
-    // Spawn across the entire 20x20 main ground area
+    
+    // Randomly position collectibles within the main play area
     collectible.position.set((Math.random() - 0.5) * 19, 0.25, (Math.random() - 0.5) * 19);
     collectible.castShadow = true;
     collectible.receiveShadow = true;
@@ -570,74 +905,79 @@ function spawnWave(waveNum) {
   }
   ghostSpawned = false;
   
-  // Don't reset followers - they should carry over between waves
-  // Just reset the spawn flag so more can be added
+  // Preserve followers between waves but allow more to be spawned
   followersSpawned = false;
   
-  // Spawn power pellet once per level
+  // Spawn power pellet if none exists
   if (!powerPelletSpawned) {
     spawnPowerPellet();
   }
   
+  // Reset player position to center of play area
   (playerModel || playerCube).position.set(0, playerModel ? 0 : 0.5, 0);
 }
 
-let lastConeSpawn = 0;
+// Spawn falling cone objects with shadow indicators
+let lastConeSpawn = 0; // Timestamp of last cone spawn
+
 function spawnCone() {
   const cone = new THREE.Mesh(coneGeometry, coneMaterial);
-  // Spawn across the entire 20x20 main ground area
-  cone.position.set((Math.random() - 0.5) * 19, 20, (Math.random() - 0.5) * 19); // spawn from much higher
-  cone.rotation.x = Math.PI;
+  
+  // Position cone randomly within play area at high altitude
+  cone.position.set((Math.random() - 0.5) * 19, 20, (Math.random() - 0.5) * 19);
+  cone.rotation.x = Math.PI; // Flip cone upside down
   cone.castShadow = true;
   cone.receiveShadow = true;
   
-  // Create ground shadow indicator
+  // Create ground shadow indicator to show where cone will land
   const shadowGeometry = new THREE.CircleGeometry(0.5, 16);
   const shadowMaterial = new THREE.MeshBasicMaterial({ 
-    color: 0x000000, 
+    color: 0x000000,    // Black shadow
     transparent: true, 
-    opacity: 0.1 // start very faint
+    opacity: 0.1        // Start very faint
   });
   const shadowIndicator = new THREE.Mesh(shadowGeometry, shadowMaterial);
-  shadowIndicator.rotation.x = -Math.PI / 2;
-  shadowIndicator.position.set(cone.position.x, 0.01, cone.position.z); // slightly above ground
+  shadowIndicator.rotation.x = -Math.PI / 2; // Lie flat on ground
+  shadowIndicator.position.set(cone.position.x, 0.01, cone.position.z); // Slightly above ground
   scene.add(shadowIndicator);
   
-  // Store shadow reference on the cone
+  // Store shadow reference and height data on the cone
   cone.userData.shadowIndicator = shadowIndicator;
-  cone.userData.maxHeight = 20; // starting height for shadow calculations
+  cone.userData.maxHeight = 20; // Starting height for shadow calculations
   
   scene.add(cone);
   cones.push(cone);
 }
 
+// Spawn friendly follower entities that protect the player from ghosts
 function spawnFollowers() {
-  if (followersSpawned || !protectionActive) return;
+  if (followersSpawned || !protectionActive) return; // Only spawn when protection is active
   
-  const numFollowers = 3 + Math.floor(waveNumber / 2); // more followers in later waves
+  // Scale follower count with wave number for increased challenge
+  const numFollowers = 3 + Math.floor(waveNumber / 2);
   for (let i = 0; i < numFollowers; i++) {
     const follower = new THREE.Mesh(followerGeometry, followerMaterial.clone());
     
-    // Spawn followers from the same general direction (behind player) with slight variations
-    const baseAngle = Math.PI; // behind the player (180 degrees)
-    const angleVariation = (Math.random() - 0.5) * 0.8; // ±0.4 radians (about ±23 degrees)
+    // Position followers behind the player with slight variations
+    const baseAngle = Math.PI; // 180 degrees (behind player)
+    const angleVariation = (Math.random() - 0.5) * 0.8; // Random spread of ±23 degrees
     const angle = baseAngle + angleVariation;
-    const spawnDistance = 25 + Math.random() * 10; // vary distance slightly
+    const spawnDistance = 25 + Math.random() * 10; // Vary spawn distance
     const player = playerModel || playerCube;
     follower.position.set(
       player.position.x + Math.cos(angle) * spawnDistance,
-      0.5,
+      0.5, // Ground level
       player.position.z + Math.sin(angle) * spawnDistance
     );
     
-    // Add bouncing properties and collision count
+    // Initialize follower behavior data
     follower.userData = {
-      bouncePhase: Math.random() * Math.PI * 2,
-      bounceSpeed: 0.01 + Math.random() * 0.005,
-      collisionCount: 0,
-      maxCollisions: 3,
-      isFlashing: false,
-      flashStartTime: 0
+      bouncePhase: Math.random() * Math.PI * 2, // Random starting animation phase
+      bounceSpeed: 0.01 + Math.random() * 0.005, // Slight speed variation
+      collisionCount: 0,    // Track hits taken from ghosts
+      maxCollisions: 3,     // Maximum hits before follower is destroyed
+      isFlashing: false,    // Visual feedback when hit
+      flashStartTime: 0     // Timestamp for flash effect timing
     };
     
     follower.castShadow = true;
@@ -648,42 +988,43 @@ function spawnFollowers() {
   followersSpawned = true;
 }
 
+// Update AI behavior and visual effects for all follower entities
 function updateFollowers(time) {
   const player = playerModel || playerCube;
   if (!player) return;
   
   followers.forEach((follower, index) => {
-    // Handle flashing effect
+    // Handle red flashing effect when follower takes damage
     if (follower.userData.isFlashing) {
-      const flashDuration = 500; // 0.5 seconds
+      const flashDuration = 500; // Flash lasts 0.5 seconds
       const elapsed = time - follower.userData.flashStartTime;
       if (elapsed < flashDuration) {
-        // Flash red
+        // Apply red flashing effect
         const flashIntensity = Math.sin(elapsed * 0.02) * 0.5 + 0.5;
-        follower.material.color.setHex(0xff0000);
-        follower.material.emissive.setHex(0x440000);
+        follower.material.color.setHex(0xff0000);  // Red color
+        follower.material.emissive.setHex(0x440000); // Dark red emissive
         follower.material.emissiveIntensity = flashIntensity * 0.5;
       } else {
-        // Return to normal green
+        // Return to normal green appearance
         follower.userData.isFlashing = false;
-        follower.material.color.setHex(0x44ff44);
-        follower.material.emissive.setHex(0x003300);
+        follower.material.color.setHex(0x44ff44);    // Bright green
+        follower.material.emissive.setHex(0x003300);  // Dark green emissive
         follower.material.emissiveIntensity = 0.2;
       }
     }
     
-    // Check for collision with ghost
+    // Handle collision with ghost enemies
     if (ghost && checkCollision(follower, ghost)) {
       follower.userData.collisionCount++;
       follower.userData.isFlashing = true;
       follower.userData.flashStartTime = time;
       
-      // Bounce ghost away
+      // Push ghost away from follower (defensive bounce)
       const bounceDirection = new THREE.Vector3();
       bounceDirection.subVectors(ghost.position, follower.position).normalize();
-      ghost.position.addScaledVector(bounceDirection, 5); // push ghost away
+      ghost.position.addScaledVector(bounceDirection, 5); // Push ghost away
       
-      // Remove follower if it's used up
+      // Remove follower if it has taken maximum damage
       if (follower.userData.collisionCount >= follower.userData.maxCollisions) {
         scene.remove(follower);
         followers.splice(index, 1);
@@ -691,23 +1032,24 @@ function updateFollowers(time) {
       }
     }
     
-    // Calculate direction to player
+    // Calculate direction vector from follower to player
     const direction = new THREE.Vector3();
     direction.subVectors(player.position, follower.position);
     const distanceToPlayer = direction.length();
     direction.normalize();
     
-    // Separation behavior - avoid other followers
+    // Implement separation behavior to prevent followers from clumping together
     const separationForce = new THREE.Vector3();
-    const separationDistance = 2.5; // minimum distance between followers
+    const separationDistance = 2.5; // Minimum distance to maintain between followers
     
     followers.forEach((otherFollower, otherIndex) => {
-      if (index === otherIndex) return;
+      if (index === otherIndex) return; // Skip self
       
       const separationDir = new THREE.Vector3();
       separationDir.subVectors(follower.position, otherFollower.position);
       const separationDist = separationDir.length();
       
+      // Apply repulsive force if too close to another follower
       if (separationDist < separationDistance && separationDist > 0) {
         separationDir.normalize();
         separationDir.multiplyScalar((separationDistance - separationDist) / separationDistance);
@@ -715,58 +1057,64 @@ function updateFollowers(time) {
       }
     });
     
-    // Patient following behavior - stay behind player at a comfortable distance
-    const followDistance = 3 + (index * 0.8); // stagger followers behind each other
+    // Implement patient following behavior with staggered positioning
+    const followDistance = 3 + (index * 0.8); // Each follower maintains different distance
     const finalDirection = new THREE.Vector3();
     
     if (distanceToPlayer > followDistance) {
-      // Move towards player but add separation force
+      // Move towards player while maintaining separation from other followers
       finalDirection.copy(direction);
-      finalDirection.multiplyScalar(followerSpeed * 0.8); // slower, more patient movement
-      finalDirection.add(separationForce.multiplyScalar(0.4)); // stronger separation
+      finalDirection.multiplyScalar(followerSpeed * 0.8); // Patient, not rushed movement
+      finalDirection.add(separationForce.multiplyScalar(0.4)); // Apply separation force
       
       follower.position.add(finalDirection);
       
-      // Gentle hopping movement when following
+      // Add animated hopping motion while moving
       follower.userData.bouncePhase += follower.userData.bounceSpeed * 1.5;
       const hopHeight = Math.abs(Math.sin(follower.userData.bouncePhase)) * 0.3;
       follower.position.y = 0.5 + hopHeight;
     } else {
-      // Wait patiently with gentle idle bounce
-      follower.userData.bouncePhase += follower.userData.bounceSpeed * 0.3; // very slow idle bounce
-      const gentleBounce = Math.sin(follower.userData.bouncePhase) * 0.08; // subtle bounce
+      // Wait patiently with subtle idle animation
+      follower.userData.bouncePhase += follower.userData.bounceSpeed * 0.3; // Slow idle bounce
+      const gentleBounce = Math.sin(follower.userData.bouncePhase) * 0.08; // Subtle movement
       follower.position.y = 0.5 + gentleBounce;
       
-      // Still apply separation when waiting
+      // Still maintain separation even when idle
       if (separationForce.length() > 0) {
         separationForce.multiplyScalar(0.3);
         follower.position.add(separationForce);
       }
     }
     
-    // Rotate to face player
+    // Always face towards the player
     follower.lookAt(player.position);
   });
 }
 
+// Spawn falling bomb objects at safe distance from player
 function spawnBomb() {
-  if (!bombModel || (!playerModel && !playerCube)) return;
+  if (!bombModel || (!playerModel && !playerCube)) return; // Only spawn if bomb model loaded and player exists
+  
+  // Get current player position for safe spawn distance calculation
   const px = playerModel ? playerModel.position.x : playerCube.position.x;
   const pz = playerModel ? playerModel.position.z : playerCube.position.z;
   let x, z;
-  const minDistance = 6;
+  const minDistance = 6; // Minimum safe distance from player
   let attempts = 0;
+  
+  // Find spawn position that's not too close to player
   do {
-    // Spawn across the entire 20x20 main ground area
-    x = (Math.random() - 0.5) * 19;
+    x = (Math.random() - 0.5) * 19; // Random position within play area
     z = (Math.random() - 0.5) * 19;
     attempts++;
   } while (Math.hypot(x - px, z - pz) < minDistance && attempts < 10);
-  const bombClone = bombModel.clone(true);
-  bombClone.position.set(x, 20, z); // spawn from much higher
-  bombClone.rotation.set(Math.PI / 2, 0, 0);
   
-  // Enable shadows for bomb model
+  // Create bomb clone from loaded model
+  const bombClone = bombModel.clone(true);
+  bombClone.position.set(x, 20, z); // Spawn from high altitude
+  bombClone.rotation.set(Math.PI / 2, 0, 0); // Rotate for proper orientation
+  
+  // Enable shadow casting for all meshes in the bomb model
   bombClone.traverse((child) => {
     if (child.isMesh) {
       child.castShadow = true;
@@ -774,34 +1122,35 @@ function spawnBomb() {
     }
   });
   
-  // Create ground shadow indicator for bomb
-  const shadowGeometry = new THREE.CircleGeometry(0.8, 16); // slightly larger for bombs
+  // Create red danger shadow indicator on ground
+  const shadowGeometry = new THREE.CircleGeometry(0.8, 16); // Larger shadow than cones
   const shadowMaterial = new THREE.MeshBasicMaterial({ 
-    color: 0xff0000, // red shadow for bombs to indicate danger
+    color: 0xff0000,   // Red color to indicate danger
     transparent: true, 
-    opacity: 0.1 // start very faint
+    opacity: 0.1       // Start faint, will intensify as bomb approaches
   });
   const shadowIndicator = new THREE.Mesh(shadowGeometry, shadowMaterial);
-  shadowIndicator.rotation.x = -Math.PI / 2;
-  shadowIndicator.position.set(x, 0.01, z); // slightly above ground
+  shadowIndicator.rotation.x = -Math.PI / 2; // Lie flat on ground
+  shadowIndicator.position.set(x, 0.01, z); // Slightly above ground to avoid z-fighting
   scene.add(shadowIndicator);
   
-  // Store shadow reference on the bomb
+  // Store shadow reference and initial height for calculations
   bombClone.userData.shadowIndicator = shadowIndicator;
-  bombClone.userData.maxHeight = 20; // starting height for shadow calculations
+  bombClone.userData.maxHeight = 20; // Starting height for shadow intensity calculations
   
   scene.add(bombClone);
   bombs.push(bombClone);
 }
 
+// Spawn power pellet that activates follower protection system
 function spawnPowerPellet() {
-  if (powerPelletSpawned) return;
+  if (powerPelletSpawned) return; // Prevent multiple pellets from spawning
   
   powerPellet = new THREE.Mesh(powerPelletGeometry, powerPelletMaterial);
-  // Spawn randomly in the play area
+  // Position randomly within the main play area
   powerPellet.position.set(
     (Math.random() - 0.5) * 19, 
-    0.4, 
+    0.4, // Slightly above ground for visibility
     (Math.random() - 0.5) * 19
   );
   powerPellet.castShadow = true;
@@ -810,49 +1159,51 @@ function spawnPowerPellet() {
   powerPelletSpawned = true;
 }
 
+// Spawn ghost enemy that chases the player
 function spawnGhost() {
-  if (ghostSpawned || waveNumber < 1) return;
+  if (ghostSpawned || waveNumber < 1) return; // Only spawn one ghost per wave
   
-  // Use loaded model if available, otherwise fallback to cylinder
+  // Use loaded GLTF model if available, otherwise fallback to cylinder geometry
   if (ghostModel) {
-    ghost = ghostModel.clone(true);
+    ghost = ghostModel.clone(true); // Clone the loaded model
     
-    // Calculate the original bounding box
+    // Calculate original model dimensions for proper scaling
     const originalBox = new THREE.Box3().setFromObject(ghost);
     const originalSize = originalBox.getSize(new THREE.Vector3());
     
-    // Target dimensions to match cylinder (radius=1, height=2)
-    const targetWidth = 2; // diameter of cylinder
-    const targetHeight = 2; // height of cylinder
+    // Target dimensions to match fallback cylinder (radius=1, height=2)
+    const targetWidth = 2;  // Diameter of cylinder
+    const targetHeight = 2; // Height of cylinder
     
     // Calculate scale factors to match cylinder dimensions
     const scaleX = targetWidth / originalSize.x;
     const scaleY = targetHeight / originalSize.y;
     const scaleZ = targetWidth / originalSize.z;
     
-    // Use uniform scaling based on the smallest scale to maintain proportions
+    // Use uniform scaling to maintain model proportions
     const uniformScale = Math.min(scaleX, scaleY, scaleZ);
     ghost.scale.set(uniformScale, uniformScale, uniformScale);
     
-    // Recalculate bounding box after scaling
+    // Recalculate bounding box after scaling to get accurate positioning
     const scaledBox = new THREE.Box3().setFromObject(ghost);
     const scaledSize = scaledBox.getSize(new THREE.Vector3());
     const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
     
-    // Position so the bottom of the model sits on the ground
-    // Account for the model's center offset and place it properly above ground
-    ghost.position.y = scaledSize.y * 0.5 + Math.abs(scaledCenter.y); // ensure bottom is at y=0
+    // Position model so bottom sits on ground (y=0)
+    ghost.position.y = scaledSize.y * 0.5 + Math.abs(scaledCenter.y); // Ensure bottom is at y=0
   } else {
+    // Fallback to cylinder geometry if model fails to load
     ghost = new THREE.Mesh(ghostGeometry, ghostMaterial);
-    ghost.position.y = 1.0; // cylinder center height (radius=1, so center at y=1)
+    ghost.position.y = 1.0; // Center height for cylinder (radius=1, so center at y=1)
   }
   
-  // Spawn at edge of play area
+  // Position ghost at random location on edge of play area
   const angle = Math.random() * Math.PI * 2;
-  const distance = 15;
+  const distance = 15; // Distance from center
   ghost.position.x = Math.cos(angle) * distance;
   ghost.position.z = Math.sin(angle) * distance;
   
+  // Enable shadow casting for GLTF model meshes
   ghost.traverse((child) => {
     if (child.isMesh) {
       child.castShadow = true;
@@ -860,7 +1211,7 @@ function spawnGhost() {
     }
   });
   
-  // For fallback cylinder, set shadows directly
+  // Enable shadows for fallback cylinder geometry
   if (!ghostModel) {
     ghost.castShadow = true;
     ghost.receiveShadow = true;
@@ -968,26 +1319,33 @@ function createExplosion(position) {
   explosionStartTime = performance.now();
 }
 
+// Main game animation loop - handles all real-time updates and rendering
 function animate(time = 0) {
-  requestAnimationFrame(animate);
+  requestAnimationFrame(animate); // Schedule next frame
   
-  // Initialize game start time
+  // Initialize game timer on first frame
   if (gameStartTime === 0) {
     gameStartTime = time;
   }
   
+  // Handle explosion particle effects during game over sequence
   if (explosionParticles.length > 0) {
     const elapsed = performance.now() - explosionStartTime;
     for (let i = explosionParticles.length - 1; i >= 0; i--) {
       const p = explosionParticles[i];
+      // Update particle physics
       p.position.addScaledVector(p.userData.velocity, 0.1);
-      p.userData.velocity.multiplyScalar(0.9);
-      p.material.opacity = 1 - elapsed / explosionDuration;
+      p.userData.velocity.multiplyScalar(0.9); // Apply friction
+      p.material.opacity = 1 - elapsed / explosionDuration; // Fade out over time
+      
+      // Remove expired particles
       if (p.material.opacity <= 0) {
         scene.remove(p);
         explosionParticles.splice(i, 1);
       }
     }
+    
+    // Trigger game over state when explosion completes
     if (elapsed >= explosionDuration && !gameOver) {
       gameOver = true;
       showGameOver();
@@ -995,98 +1353,110 @@ function animate(time = 0) {
     renderer.render(scene, camera);
     return;
   }
-  if (gameOver) {
+  
+  // Skip game logic updates if game is over or not started yet
+  if (gameOver || !gameStarted) {
+    // Still allow camera updates and basic rendering when game not started
+    if (isFollowingPlayer) {
+      const player = playerModel || playerCube;
+      cameraTarget.copy(player.position);
+      camera.position.copy(player.position).add(cameraOffset);
+      camera.lookAt(player.position);
+    }
     renderer.render(scene, camera);
     return;
   }
 
-  // Spawn followers after delay (only if protection is active)
+  // Spawn follower protection after delay when protection is active
   if (!followersSpawned && protectionActive && time - gameStartTime > followerSpawnDelay) {
     spawnFollowers();
   }
   
-  // Spawn ghost after level 1 (for debugging)
+  // Spawn ghost enemy starting from wave 1
   if (!ghostSpawned && waveNumber >= 1) {
     spawnGhost();
   }
   
-  // Update followers
+  // Update follower AI and animations
   if (followersSpawned) {
     updateFollowers(time);
   }
   
-  // Update ghost
+  // Update ghost AI and ensure proper positioning
   if (ghostSpawned && ghost) {
     updateGhost();
     
-    // Dynamic height check based on model type
-    let minAllowedHeight = 0.5; // default minimum
+    // Safety check to prevent ghost from going underground
+    let minAllowedHeight = 0.5; // Default minimum for cylinder
     if (ghostModel && ghost.children.length > 0) {
-      // For GLTF model, calculate proper minimum height to keep bottom above ground
+      // Calculate proper minimum height for GLTF model
       const box = new THREE.Box3().setFromObject(ghost);
       const size = box.getSize(new THREE.Vector3());
       const center = box.getCenter(new THREE.Vector3());
-      minAllowedHeight = size.y * 0.5 + Math.abs(center.y); // bottom should be at y=0 minimum
+      minAllowedHeight = size.y * 0.5 + Math.abs(center.y); // Keep bottom above ground
     }
     
+    // Reposition ghost if it somehow goes below ground
     if (ghost.position.y < minAllowedHeight) {
       console.warn("Ghost below ground, repositioning");
-      // Reset to proper spawn height
       if (ghostModel && ghost.children.length > 0) {
         const box = new THREE.Box3().setFromObject(ghost);
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
-        ghost.position.y = size.y * 0.5 + Math.abs(center.y); // proper ground positioning
+        ghost.position.y = size.y * 0.5 + Math.abs(center.y); // Proper ground positioning
       } else {
-        ghost.position.y = 1.0; // cylinder center height
+        ghost.position.y = 1.0; // Cylinder center height
       }
     }
   }
 
-  const speed = 0.25;
-  const moveVector = new THREE.Vector3(0, 0, 0);
-  let isMoving = false;
-  
-  // Use arrow keys instead of WASD
-  if (keys.ArrowUp) { moveVector.z -= 1; isMoving = true; }
-  if (keys.ArrowDown) { moveVector.z += 1; isMoving = true; }
-  if (keys.ArrowLeft) { moveVector.x -= 1; isMoving = true; }
-  if (keys.ArrowRight) { moveVector.x += 1; isMoving = true; }
+  // Only process player movement and game interactions when game has started
+  if (gameStarted) {
+    const speed = 0.25;
+    const moveVector = new THREE.Vector3(0, 0, 0);
+    let isMoving = false;
+    
+    // Use arrow keys
+    if (keys.ArrowUp) { moveVector.z -= 1; isMoving = true; }
+    if (keys.ArrowDown) { moveVector.z += 1; isMoving = true; }
+    if (keys.ArrowLeft) { moveVector.x -= 1; isMoving = true; }
+    if (keys.ArrowRight) { moveVector.x += 1; isMoving = true; }
 
-  if (moveVector.length() > 0) {
-    moveVector.normalize();
-    if (playerModel) {
-      playerModel.position.addScaledVector(moveVector, speed);
-      playerModel.rotation.y = Math.atan2(moveVector.x, moveVector.z);
-    } else {
-      playerCube.position.addScaledVector(moveVector, speed);
-      playerCube.rotation.y = Math.atan2(moveVector.x, moveVector.z);
+    if (moveVector.length() > 0) {
+      moveVector.normalize();
+      if (playerModel) {
+        playerModel.position.addScaledVector(moveVector, speed);
+        playerModel.rotation.y = Math.atan2(moveVector.x, moveVector.z);
+      } else {
+        playerCube.position.addScaledVector(moveVector, speed);
+        playerCube.rotation.y = Math.atan2(moveVector.x, moveVector.z);
+      }
+      
+      // Snap camera back to following player when moving
+      if (!isFollowingPlayer) {
+        isFollowingPlayer = true;
+        cameraOffset = new THREE.Vector3(5, 10, 8); // reset to default offset
+      }
     }
     
-    // Snap camera back to following player when moving
-    if (!isFollowingPlayer) {
-      isFollowingPlayer = true;
-      cameraOffset = new THREE.Vector3(5, 10, 8); // reset to default offset
+    // Update camera position
+    if (isFollowingPlayer) {
+      const player = playerModel || playerCube;
+      cameraTarget.copy(player.position);
+      camera.position.copy(player.position).add(cameraOffset);
+      camera.lookAt(player.position);
     }
+    // If not following player, camera position is already set by mouse drag
+    
+    // Generate tiles around player
+    generateTilesAroundPlayer();
+    
+    // Update current player tile with effects
+    updatePlayerTile(time);
+    
+    // Check for tile interactions
+    checkTileInteraction();
   }
-  
-  // Update camera position
-  if (isFollowingPlayer) {
-    const player = playerModel || playerCube;
-    cameraTarget.copy(player.position);
-    camera.position.copy(player.position).add(cameraOffset);
-    camera.lookAt(player.position);
-  }
-  // If not following player, camera position is already set by mouse drag
-  
-  // Generate tiles around player
-  generateTilesAroundPlayer();
-  
-  // Update current player tile with effects
-  updatePlayerTile(time);
-  
-  // Check for tile interactions
-  checkTileInteraction();
 
   const player = playerModel || playerCube;
 if (!player || !scene.children.includes(player)) {
@@ -1094,16 +1464,17 @@ if (!player || !scene.children.includes(player)) {
   return; // no player, stop processing collisions & movement
 }
 
-
-  for (let i = collectibles.length - 1; i >= 0; i--) {
-    const c = collectibles[i];
-    if (checkCollision(playerModel || playerCube, c)) {
-      scene.remove(c);
-      collectibles.splice(i, 1);
-      score++;
-      scoreDiv.textContent = `Score: ${score}`;
+  // Only process game logic (collisions, spawning, etc.) when game has started
+  if (gameStarted) {
+    for (let i = collectibles.length - 1; i >= 0; i--) {
+      const c = collectibles[i];
+      if (checkCollision(playerModel || playerCube, c)) {
+        scene.remove(c);
+        collectibles.splice(i, 1);
+        score++;
+        scoreDiv.textContent = `Score: ${score}`;
+      }
     }
-  }
   
   // Check power pellet collision
   if (powerPellet && checkCollision(playerModel || playerCube, powerPellet)) {
@@ -1203,17 +1574,22 @@ if (!player || !scene.children.includes(player)) {
       break;
     }
   }
+  } // End gameStarted check
 
+  // Render the final frame
   renderer.render(scene, camera);
 }
 
+// Initialize the game after a 5-second delay to allow assets to load
 setTimeout(() => {
-  spawnWave(waveNumber);
-  gameStartTime = performance.now(); // Initialize game start time
-}, 5000); // Changed from 3000 to 5000 for 5 second delay
+  // Show name input dialog instead of automatically starting
+  showNameInput();
+}, 5000); // 5-second startup delay
 
+// Start the main animation loop
 animate();
 
+// Handle window resize events to maintain proper aspect ratio
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();

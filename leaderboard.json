@@ -1,0 +1,51 @@
+[
+  {
+    "playerName": "Test Player",
+    "score": 100,
+    "wave": 1,
+    "timestamp": "2025-08-06T23:24:52.275Z",
+    "id": 1754522692275.3784
+  },
+  {
+    "playerName": "Robert",
+    "score": 0,
+    "wave": 1,
+    "timestamp": "2025-08-06T23:26:14.563Z",
+    "id": 1754522774563.9539
+  },
+  {
+    "playerName": "Robert",
+    "score": 1,
+    "wave": 1,
+    "timestamp": "2025-08-06T23:27:14.165Z",
+    "id": 1754522834165.2202
+  },
+  {
+    "playerName": "Robert",
+    "score": 12,
+    "wave": 2,
+    "timestamp": "2025-08-06T23:32:38.343Z",
+    "id": 1754523158343.305
+  },
+  {
+    "playerName": "Robert",
+    "score": 2,
+    "wave": 1,
+    "timestamp": "2025-08-06T23:33:03.027Z",
+    "id": 1754523183027.2764
+  },
+  {
+    "playerName": "Robert",
+    "score": 0,
+    "wave": 1,
+    "timestamp": "2025-08-06T23:38:06.940Z",
+    "id": 1754523486940.6458
+  },
+  {
+    "playerName": "Robert",
+    "score": 3,
+    "wave": 1,
+    "timestamp": "2025-08-06T23:38:18.172Z",
+    "id": 1754523498172.4934
+  }
+]

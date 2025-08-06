@@ -1,20 +1,25 @@
 {
   "name": "simple4235",
   "version": "1.0.0",
-  "description": "",
+  "description": "3D Game with Three.js and Leaderboard System",
   "main": "main.js",
   "scripts": {
     "dev": "vite",
+    "server": "node server.js",
+    "server-dev": "nodemon server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["threejs", "game", "leaderboard"],
+  "author": "Robert",
   "license": "ISC",
   "type": "module",
   "devDependencies": {
-    "vite": "^7.0.6"
+    "vite": "^7.0.6",
+    "nodemon": "^3.0.1"
   },
   "dependencies": {
-    "three": "^0.152.2"
+    "three": "^0.152.2",
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
   }
 }
