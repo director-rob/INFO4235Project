@@ -168,131 +168,200 @@ window.addEventListener('keyup', (e) => {
   }
 });
 
-// Mobile virtual keypad creation and management
-let mobileKeypad = null;
+// Mobile virtual joystick creation and management
+let mobileJoystick = null;
+let joystickData = {
+  active: false,
+  x: 0, // -1 to 1 (left to right)
+  y: 0, // -1 to 1 (up to down)
+  centerX: 0,
+  centerY: 0,
+  maxDistance: 50
+};
 
-function createMobileKeypad() {
-  if (mobileKeypad || !isMobileDevice()) return;
+function createMobileJoystick() {
+  if (mobileJoystick || !isMobileDevice()) return;
 
-  mobileKeypad = document.createElement('div');
-  mobileKeypad.id = 'mobile-keypad';
-  mobileKeypad.style.cssText = `
+  // Create joystick container
+  mobileJoystick = document.createElement('div');
+  mobileJoystick.id = 'mobile-joystick';
+  mobileJoystick.style.cssText = `
     position: fixed;
-    bottom: 20px;
-    left: 20px;
-    width: 150px;
-    height: 150px;
+    bottom: 30px;
+    left: 30px;
+    width: 120px;
+    height: 120px;
     z-index: 1000;
     user-select: none;
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
+    touch-action: none;
   `;
 
-  // Create arrow buttons
-  const buttonStyle = `
+  // Create joystick base (outer circle)
+  const joystickBase = document.createElement('div');
+  joystickBase.style.cssText = `
     position: absolute;
-    width: 45px;
-    height: 45px;
-    background: rgba(255, 255, 255, 0.8);
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    border: 3px solid rgba(255, 255, 255, 0.6);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  `;
+
+  // Create joystick knob (inner circle)
+  const joystickKnob = document.createElement('div');
+  joystickKnob.style.cssText = `
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.9);
     border: 2px solid #333;
-    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    transition: all 0.1s ease;
+  `;
+
+  // Create interaction button in center
+  const interactionButton = document.createElement('div');
+  interactionButton.style.cssText = `
+    position: absolute;
+    width: 60px;
+    height: 30px;
+    background: rgba(255, 152, 0, 0.9);
+    border: 2px solid #333;
+    border-radius: 15px;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
-    font-weight: bold;
-    color: #333;
-    cursor: pointer;
-    touch-action: manipulation;
+    bottom: -50px;
+    left: 50%;
+    transform: translateX(-50%);
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    touch-action: manipulation;
   `;
+  interactionButton.innerHTML = '⚡ ACTION';
 
-  const activeButtonStyle = `
-    background: rgba(100, 200, 255, 0.9);
-    transform: scale(0.95);
-    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
-  `;
+  mobileJoystick.appendChild(joystickBase);
+  mobileJoystick.appendChild(joystickKnob);
+  mobileJoystick.appendChild(interactionButton);
 
-  // Up arrow
-  const upButton = document.createElement('div');
-  upButton.style.cssText = buttonStyle + 'top: 0; left: 52.5px;';
-  upButton.innerHTML = '↑';
-  upButton.dataset.key = 'ArrowUp';
+  // Store references
+  mobileJoystick.base = joystickBase;
+  mobileJoystick.knob = joystickKnob;
+  mobileJoystick.actionBtn = interactionButton;
 
-  // Down arrow
-  const downButton = document.createElement('div');
-  downButton.style.cssText = buttonStyle + 'bottom: 0; left: 52.5px;';
-  downButton.innerHTML = '↓';
-  downButton.dataset.key = 'ArrowDown';
+  // Set up joystick center coordinates
+  joystickData.centerX = 60; // Half of container width
+  joystickData.centerY = 60; // Half of container height
 
-  // Left arrow
-  const leftButton = document.createElement('div');
-  leftButton.style.cssText = buttonStyle + 'top: 52.5px; left: 0;';
-  leftButton.innerHTML = '←';
-  leftButton.dataset.key = 'ArrowLeft';
+  // Touch event handlers for joystick
+  const handleJoystickStart = (e) => {
+    e.preventDefault();
+    joystickData.active = true;
+    joystickKnob.style.transition = 'none';
+    updateJoystick(e);
+  };
 
-  // Right arrow
-  const rightButton = document.createElement('div');
-  rightButton.style.cssText = buttonStyle + 'top: 52.5px; right: 0;';
-  rightButton.innerHTML = '→';
-  rightButton.dataset.key = 'ArrowRight';
+  const handleJoystickMove = (e) => {
+    e.preventDefault();
+    if (joystickData.active) {
+      updateJoystick(e);
+    }
+  };
 
-  // Center button for interactions (spacebar equivalent)
-  const centerButton = document.createElement('div');
-  centerButton.style.cssText = buttonStyle + 'top: 52.5px; left: 52.5px; font-size: 16px;';
-  centerButton.innerHTML = '⚡';
-  centerButton.dataset.key = ' ';
+  const handleJoystickEnd = (e) => {
+    e.preventDefault();
+    joystickData.active = false;
+    joystickData.x = 0;
+    joystickData.y = 0;
+    
+    // Reset knob to center with smooth transition
+    joystickKnob.style.transition = 'all 0.2s ease';
+    joystickKnob.style.transform = 'translate(-50%, -50%)';
+    
+    // Clear movement keys
+    keys.ArrowUp = false;
+    keys.ArrowDown = false;
+    keys.ArrowLeft = false;
+    keys.ArrowRight = false;
+  };
 
-  const buttons = [upButton, downButton, leftButton, rightButton, centerButton];
+  // Add touch events to base
+  joystickBase.addEventListener('touchstart', handleJoystickStart, { passive: false });
+  joystickBase.addEventListener('touchmove', handleJoystickMove, { passive: false });
+  joystickBase.addEventListener('touchend', handleJoystickEnd, { passive: false });
 
-  buttons.forEach(button => {
-    // Touch events for mobile
-    button.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      const key = button.dataset.key;
-      keys[key] = true;
-      button.style.cssText += activeButtonStyle;
-    });
-
-    button.addEventListener('touchend', (e) => {
-      e.preventDefault();
-      const key = button.dataset.key;
-      keys[key] = false;
-      // Reset button style
-      button.style.cssText = button.style.cssText.replace(activeButtonStyle, '');
-    });
-
-    // Mouse events for testing on desktop
-    button.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      const key = button.dataset.key;
-      keys[key] = true;
-      button.style.cssText += activeButtonStyle;
-    });
-
-    button.addEventListener('mouseup', (e) => {
-      e.preventDefault();
-      const key = button.dataset.key;
-      keys[key] = false;
-      button.style.cssText = button.style.cssText.replace(activeButtonStyle, '');
-    });
-
-    // Prevent context menu on long press
-    button.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-    });
-
-    mobileKeypad.appendChild(button);
+  // Action button events
+  interactionButton.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    keys[' '] = true;
+    interactionButton.style.background = 'rgba(255, 100, 0, 1)';
+    interactionButton.style.transform = 'translateX(-50%) scale(0.95)';
   });
 
-  document.body.appendChild(mobileKeypad);
+  interactionButton.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    keys[' '] = false;
+    interactionButton.style.background = 'rgba(255, 152, 0, 0.9)';
+    interactionButton.style.transform = 'translateX(-50%) scale(1)';
+  });
+
+  document.body.appendChild(mobileJoystick);
 }
 
-function hideMobileKeypad() {
-  if (mobileKeypad) {
-    document.body.removeChild(mobileKeypad);
-    mobileKeypad = null;
+function updateJoystick(e) {
+  const touch = e.touches[0];
+  const rect = mobileJoystick.getBoundingClientRect();
+  
+  // Calculate relative position from joystick center
+  const relativeX = touch.clientX - rect.left - joystickData.centerX;
+  const relativeY = touch.clientY - rect.top - joystickData.centerY;
+  
+  // Calculate distance from center
+  const distance = Math.sqrt(relativeX * relativeX + relativeY * relativeY);
+  
+  // Limit knob movement to maxDistance
+  let limitedX = relativeX;
+  let limitedY = relativeY;
+  
+  if (distance > joystickData.maxDistance) {
+    const ratio = joystickData.maxDistance / distance;
+    limitedX = relativeX * ratio;
+    limitedY = relativeY * ratio;
+  }
+  
+  // Update knob position
+  mobileJoystick.knob.style.transform = `translate(calc(-50% + ${limitedX}px), calc(-50% + ${limitedY}px))`;
+  
+  // Calculate normalized values (-1 to 1)
+  joystickData.x = limitedX / joystickData.maxDistance;
+  joystickData.y = limitedY / joystickData.maxDistance;
+  
+  // Convert joystick input to key states (with deadzone)
+  const deadzone = 0.2;
+  
+  keys.ArrowLeft = joystickData.x < -deadzone;
+  keys.ArrowRight = joystickData.x > deadzone;
+  keys.ArrowUp = joystickData.y < -deadzone;
+  keys.ArrowDown = joystickData.y > deadzone;
+}
+
+function hideMobileJoystick() {
+  if (mobileJoystick) {
+    document.body.removeChild(mobileJoystick);
+    mobileJoystick = null;
+    joystickData.active = false;
+    joystickData.x = 0;
+    joystickData.y = 0;
   }
 }
 
@@ -647,8 +716,8 @@ let gameOverDiv = null;         // Reference to game over display element
 async function showGameOver() {
   if (gameOverDiv) return; // Prevent multiple game over screens
 
-  // Hide mobile keypad during game over
-  hideMobileKeypad();
+  // Hide mobile joystick during game over
+  hideMobileJoystick();
 
   // Submit score to leaderboard if player has a name
   if (playerName && playerName !== 'Anonymous') {
@@ -740,8 +809,8 @@ function startGame() {
   hideLeaderboard();
   hideNameInput();
   
-  // Show mobile keypad if on mobile device
-  createMobileKeypad();
+  // Show mobile joystick if on mobile device
+  createMobileJoystick();
   
   // Spawn the first wave
   spawnWave(waveNumber);
@@ -755,8 +824,8 @@ function restartGame() {
   hideLeaderboard();
   hideNameInput();
   
-  // Show mobile keypad if on mobile device
-  createMobileKeypad();
+  // Show mobile joystick if on mobile device
+  createMobileJoystick();
   
   // Remove all explosion particles from scene
   explosionParticles.forEach(p => scene.remove(p));
@@ -1560,31 +1629,59 @@ function animate(time = 0) {
   // Only process player movement and game interactions when game has started
   if (gameStarted) {
     // Adjust speed for mobile devices (slightly faster for touch controls)
-    const speed = isMobileDevice() ? 0.3 : 0.25;
+    const baseSpeed = isMobileDevice() ? 0.3 : 0.25;
     const moveVector = new THREE.Vector3(0, 0, 0);
     let isMoving = false;
     
-    // Use arrow keys
-    if (keys.ArrowUp) { moveVector.z -= 1; isMoving = true; }
-    if (keys.ArrowDown) { moveVector.z += 1; isMoving = true; }
-    if (keys.ArrowLeft) { moveVector.x -= 1; isMoving = true; }
-    if (keys.ArrowRight) { moveVector.x += 1; isMoving = true; }
-
-    if (moveVector.length() > 0) {
-      moveVector.normalize();
-      if (playerModel) {
-        playerModel.position.addScaledVector(moveVector, speed);
-        playerModel.rotation.y = Math.atan2(moveVector.x, moveVector.z);
-      } else {
-        playerCube.position.addScaledVector(moveVector, speed);
-        playerCube.rotation.y = Math.atan2(moveVector.x, moveVector.z);
-      }
+    // Use joystick analog input on mobile, digital keys on desktop
+    if (isMobileDevice() && joystickData.active) {
+      // Use analog joystick values for smooth movement
+      moveVector.x = joystickData.x;
+      moveVector.z = joystickData.y;
       
-      // Snap camera back to following player when moving
-      if (!isFollowingPlayer) {
-        isFollowingPlayer = true;
-        cameraOffset = new THREE.Vector3(5, 10, 8); // reset to default offset
+      // Apply deadzone and smooth scaling
+      const magnitude = Math.sqrt(moveVector.x * moveVector.x + moveVector.z * moveVector.z);
+      if (magnitude > 0.2) { // Deadzone
+        isMoving = true;
+        // Don't normalize for analog input - use actual magnitude for variable speed
+        const speed = baseSpeed * magnitude;
+        
+        if (playerModel) {
+          playerModel.position.addScaledVector(moveVector, speed);
+          // Only rotate if moving significantly
+          if (magnitude > 0.3) {
+            playerModel.rotation.y = Math.atan2(moveVector.x, moveVector.z);
+          }
+        } else {
+          playerCube.position.addScaledVector(moveVector, speed);
+          if (magnitude > 0.3) {
+            playerCube.rotation.y = Math.atan2(moveVector.x, moveVector.z);
+          }
+        }
       }
+    } else {
+      // Use digital arrow keys (desktop or mobile fallback)
+      if (keys.ArrowUp) { moveVector.z -= 1; isMoving = true; }
+      if (keys.ArrowDown) { moveVector.z += 1; isMoving = true; }
+      if (keys.ArrowLeft) { moveVector.x -= 1; isMoving = true; }
+      if (keys.ArrowRight) { moveVector.x += 1; isMoving = true; }
+
+      if (moveVector.length() > 0) {
+        moveVector.normalize();
+        if (playerModel) {
+          playerModel.position.addScaledVector(moveVector, baseSpeed);
+          playerModel.rotation.y = Math.atan2(moveVector.x, moveVector.z);
+        } else {
+          playerCube.position.addScaledVector(moveVector, baseSpeed);
+          playerCube.rotation.y = Math.atan2(moveVector.x, moveVector.z);
+        }
+      }
+    }
+    
+    // Snap camera back to following player when moving
+    if (isMoving && !isFollowingPlayer) {
+      isFollowingPlayer = true;
+      cameraOffset = new THREE.Vector3(5, 10, 8); // reset to default offset
     }
     
     // Update camera position
