@@ -2,10 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Three.js Car Loader</title>
   <style>
-    body { margin: 0; overflow: hidden; }
-    canvas { display: block; width: 100vw; height: 100vh; }
+    body { 
+      margin: 0; 
+      overflow: hidden; 
+      touch-action: none; /* Prevent default touch behaviors */
+      -webkit-touch-callout: none; /* Disable iOS callout */
+      -webkit-user-select: none; /* Disable text selection */
+      user-select: none;
+    }
+    canvas { 
+      display: block; 
+      width: 100vw; 
+      height: 100vh;
+      touch-action: none; /* Prevent zoom/pan on canvas */
+    }
     #score {
       position: fixed;
       top: 10px;

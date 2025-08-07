@@ -9,13 +9,20 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 const LEADERBOARD_FILE = join(__dirname, 'leaderboard.json');
 
 // Middleware
 app.use(cors()); // Enable CORS for frontend communication
 app.use(express.json()); // Parse JSON request bodies
-app.use(express.static('.')); // Serve static files from current directory
+
+// Serve static files from dist directory in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(join(__dirname, 'dist')));
+} else {
+  // In development, serve assets from root
+  app.use(express.static(__dirname));
+}
 
 // Initialize leaderboard file if it doesn't exist
 async function initializeLeaderboard() {
@@ -190,14 +197,24 @@ app.post('/api/leaderboard/update', async (req, res) => {
   }
 });
 
+// In production, serve index.html for any route not handled by API
+if (process.env.NODE_ENV === 'production') {
+  app.get('*', (req, res) => {
+    res.sendFile(join(__dirname, 'dist', 'index.html'));
+  });
+}
+
 // Start server
 async function startServer() {
   await initializeLeaderboard();
   
   app.listen(PORT, () => {
-    console.log(`🚀 Leaderboard server running on http://localhost:${PORT}`);
-    console.log(`📊 Leaderboard API available at http://localhost:${PORT}/api/leaderboard`);
-    console.log(`🎮 Game available at http://localhost:${PORT}/index.html`);
+    console.log(`🚀 Leaderboard server running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`📊 Leaderboard API available at http://localhost:${PORT}/api/leaderboard`);
+      console.log(`🎮 Game available at http://localhost:${PORT}/index.html`);
+    }
   });
 }
 

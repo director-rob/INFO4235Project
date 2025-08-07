@@ -1,12 +1,15 @@
 {
-  "name": "simple4235",
+  "name": "info4235project",
   "version": "1.0.0",
   "description": "3D Game with Three.js and Leaderboard System",
-  "main": "main.js",
+  "main": "server.js",
   "scripts": {
     "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "server": "node server.js",
     "server-dev": "nodemon server.js",
+    "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": ["threejs", "game", "leaderboard"],

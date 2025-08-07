@@ -7,7 +7,7 @@ const scene = new THREE.Scene();
 
 // Load and set sky background texture
 const loader = new THREE.TextureLoader();
-loader.load('sky.jpg', (texture) => {
+loader.load('/sky.jpg', (texture) => {
   scene.background = texture;
 });
 
@@ -93,7 +93,7 @@ const gltfLoader = new GLTFLoader();
 const bombLoader = new GLTFLoader();
 const ghostLoader = new GLTFLoader();
 // Load car model as main player character
-gltfLoader.load('car/scene.gltf', (gltf) => {
+gltfLoader.load('/car/scene.gltf', (gltf) => {
   playerModel = gltf.scene;
   playerModel.scale.set(0.7, 0.7, 0.7); // Scale down the car model
   playerModel.position.set(0, 0, 0); // Position at world origin
@@ -111,7 +111,7 @@ gltfLoader.load('car/scene.gltf', (gltf) => {
 });
 
 // Load bomb model for falling objects
-bombLoader.load('bomb/scene.gltf', (gltf) => {
+bombLoader.load('/bomb/scene.gltf', (gltf) => {
   bombModel = gltf.scene;
   bombModel.scale.set(0.01, 0.01, 0.01); // Scale down bomb model significantly
   // Enable shadows for all meshes in the bomb model
@@ -124,7 +124,7 @@ bombLoader.load('bomb/scene.gltf', (gltf) => {
 });
 
 // Load ghost model for enemy characters
-ghostLoader.load('blinky_from_pacman.glb', (gltf) => {
+ghostLoader.load('/blinky_from_pacman.glb', (gltf) => {
   ghostModel = gltf.scene;
   ghostModel.scale.set(0.5, 0.5, 0.5); // Scale ghost model appropriately
   // Enable shadows for all meshes in the ghost model
@@ -135,6 +135,13 @@ ghostLoader.load('blinky_from_pacman.glb', (gltf) => {
     }
   });
 });
+
+// Mobile device detection
+function isMobileDevice() {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+         ('ontouchstart' in window) ||
+         (navigator.maxTouchPoints > 0);
+}
 
 // Input handling system using arrow keys and spacebar
 const keys = { 
@@ -160,6 +167,134 @@ window.addEventListener('keyup', (e) => {
     e.preventDefault();
   }
 });
+
+// Mobile virtual keypad creation and management
+let mobileKeypad = null;
+
+function createMobileKeypad() {
+  if (mobileKeypad || !isMobileDevice()) return;
+
+  mobileKeypad = document.createElement('div');
+  mobileKeypad.id = 'mobile-keypad';
+  mobileKeypad.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    width: 150px;
+    height: 150px;
+    z-index: 1000;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+  `;
+
+  // Create arrow buttons
+  const buttonStyle = `
+    position: absolute;
+    width: 45px;
+    height: 45px;
+    background: rgba(255, 255, 255, 0.8);
+    border: 2px solid #333;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: bold;
+    color: #333;
+    cursor: pointer;
+    touch-action: manipulation;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  `;
+
+  const activeButtonStyle = `
+    background: rgba(100, 200, 255, 0.9);
+    transform: scale(0.95);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  `;
+
+  // Up arrow
+  const upButton = document.createElement('div');
+  upButton.style.cssText = buttonStyle + 'top: 0; left: 52.5px;';
+  upButton.innerHTML = '↑';
+  upButton.dataset.key = 'ArrowUp';
+
+  // Down arrow
+  const downButton = document.createElement('div');
+  downButton.style.cssText = buttonStyle + 'bottom: 0; left: 52.5px;';
+  downButton.innerHTML = '↓';
+  downButton.dataset.key = 'ArrowDown';
+
+  // Left arrow
+  const leftButton = document.createElement('div');
+  leftButton.style.cssText = buttonStyle + 'top: 52.5px; left: 0;';
+  leftButton.innerHTML = '←';
+  leftButton.dataset.key = 'ArrowLeft';
+
+  // Right arrow
+  const rightButton = document.createElement('div');
+  rightButton.style.cssText = buttonStyle + 'top: 52.5px; right: 0;';
+  rightButton.innerHTML = '→';
+  rightButton.dataset.key = 'ArrowRight';
+
+  // Center button for interactions (spacebar equivalent)
+  const centerButton = document.createElement('div');
+  centerButton.style.cssText = buttonStyle + 'top: 52.5px; left: 52.5px; font-size: 16px;';
+  centerButton.innerHTML = '⚡';
+  centerButton.dataset.key = ' ';
+
+  const buttons = [upButton, downButton, leftButton, rightButton, centerButton];
+
+  buttons.forEach(button => {
+    // Touch events for mobile
+    button.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const key = button.dataset.key;
+      keys[key] = true;
+      button.style.cssText += activeButtonStyle;
+    });
+
+    button.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      const key = button.dataset.key;
+      keys[key] = false;
+      // Reset button style
+      button.style.cssText = button.style.cssText.replace(activeButtonStyle, '');
+    });
+
+    // Mouse events for testing on desktop
+    button.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const key = button.dataset.key;
+      keys[key] = true;
+      button.style.cssText += activeButtonStyle;
+    });
+
+    button.addEventListener('mouseup', (e) => {
+      e.preventDefault();
+      const key = button.dataset.key;
+      keys[key] = false;
+      button.style.cssText = button.style.cssText.replace(activeButtonStyle, '');
+    });
+
+    // Prevent context menu on long press
+    button.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+    });
+
+    mobileKeypad.appendChild(button);
+  });
+
+  document.body.appendChild(mobileKeypad);
+}
+
+function hideMobileKeypad() {
+  if (mobileKeypad) {
+    document.body.removeChild(mobileKeypad);
+    mobileKeypad = null;
+  }
+}
 
 // Game state variables
 const scoreDiv = document.getElementById('score'); // Reference to score display element
@@ -205,7 +340,10 @@ let playerName = '';                     // Player's name for leaderboard
 let currentLeaderboard = [];             // Current leaderboard data
 let leaderboardContainer = null;         // Reference to leaderboard display
 let nameInputContainer = null;           // Reference to name input UI
-const SERVER_URL = 'http://localhost:3001/api'; // Backend server API URL
+// Use relative URL in production, localhost in development
+const SERVER_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost:3001/api' 
+  : '/api';
 
 // Leaderboard API functions
 // Fetch current leaderboard from server
@@ -509,6 +647,9 @@ let gameOverDiv = null;         // Reference to game over display element
 async function showGameOver() {
   if (gameOverDiv) return; // Prevent multiple game over screens
 
+  // Hide mobile keypad during game over
+  hideMobileKeypad();
+
   // Submit score to leaderboard if player has a name
   if (playerName && playerName !== 'Anonymous') {
     await submitScore(playerName, score);
@@ -599,6 +740,9 @@ function startGame() {
   hideLeaderboard();
   hideNameInput();
   
+  // Show mobile keypad if on mobile device
+  createMobileKeypad();
+  
   // Spawn the first wave
   spawnWave(waveNumber);
 }
@@ -610,6 +754,9 @@ function restartGame() {
   gameOverDiv = null;
   hideLeaderboard();
   hideNameInput();
+  
+  // Show mobile keypad if on mobile device
+  createMobileKeypad();
   
   // Remove all explosion particles from scene
   explosionParticles.forEach(p => scene.remove(p));
@@ -1412,7 +1559,8 @@ function animate(time = 0) {
 
   // Only process player movement and game interactions when game has started
   if (gameStarted) {
-    const speed = 0.25;
+    // Adjust speed for mobile devices (slightly faster for touch controls)
+    const speed = isMobileDevice() ? 0.3 : 0.25;
     const moveVector = new THREE.Vector3(0, 0, 0);
     let isMoving = false;
     

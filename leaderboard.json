@@ -47,5 +47,26 @@
     "wave": 1,
     "timestamp": "2025-08-06T23:38:18.172Z",
     "id": 1754523498172.4934
+  },
+  {
+    "playerName": "Robert",
+    "score": 0,
+    "wave": 1,
+    "timestamp": "2025-08-06T23:51:22.480Z",
+    "id": 1754524282480.3357
+  },
+  {
+    "playerName": "Robert",
+    "score": 1,
+    "wave": 1,
+    "timestamp": "2025-08-06T23:51:31.357Z",
+    "id": 1754524291357.737
+  },
+  {
+    "playerName": "Robert",
+    "score": 4,
+    "wave": 1,
+    "timestamp": "2025-08-07T00:12:18.483Z",
+    "id": 1754525538483.3586
   }
 ]

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Three.js Car Loader</title>
+  <style>
+    body { 
+      margin: 0; 
+      overflow: hidden; 
+      touch-action: none; /* Prevent default touch behaviors */
+      -webkit-touch-callout: none; /* Disable iOS callout */
+      -webkit-user-select: none; /* Disable text selection */
+      user-select: none;
+    }
+    canvas { 
+      display: block; 
+      width: 100vw; 
+      height: 100vh;
+      touch-action: none; /* Prevent zoom/pan on canvas */
+    }
+    #score {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-family: Arial, sans-serif;
+      font-size: 24px;
+      user-select: none;
+      z-index: 10;
+    }
+    #instructions {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      color: white;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      user-select: none;
+      z-index: 10;
+      background: rgba(0,0,0,0.5);
+      padding: 10px;
+      border-radius: 5px;
+      max-width: 250px;
+    }
+    #leaderboard-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 10px 15px;
+      background: rgba(255, 152, 0, 0.9);
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      cursor: pointer;
+      z-index: 10;
+      transition: background 0.3s;
+    }
+    #leaderboard-btn:hover {
+      background: rgba(255, 152, 0, 1);
+    }
+  </style>
+  <script type="module" crossorigin src="/assets/main-slnWizwx.js"></script>
+</head>
+<body>
+  <canvas id="three-canvas"></canvas>
+  <div id="score">Score: 0</div>
+  <div id="instructions">
+    <strong>Controls:</strong><br>
+    • Arrow Keys: Move car<br>
+    • Mouse: Drag to look around<br>
+    • Space: Interact with colored tiles<br>
+    • Click: Click colored tiles to visit websites<br>
+    • R: Restart game (when game over)<br><br>
+    <strong>Goal:</strong> Collect red rectangles, avoid falling objects and ghosts, green blocks provide protective followers, explore the world!
+  </div>
+  
+  <button id="leaderboard-btn" onclick="toggleLeaderboard()">🏆 Leaderboard</button>
+
+</body>
+</html>
