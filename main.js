@@ -590,7 +590,7 @@ let previousPlayerTileKey = null;  // Previous tile for reset purposes
 // Interactive tile types with associated websites
 const tileTypes = [
   { color: 0x4CAF50, website: 'https://threejs.org', name: 'Three.js' },  // Green tile links to Three.js
-  { color: 0x2196F3, website: 'https://github.com', name: 'GitHub' },     // Blue tile links to GitHub
+  { color: 0x2196F3, website: 'https://github.com/director-rob/INFO4235Project', name: 'GitHub' },     // Blue tile links to GitHub
 ];
 
 // Mouse event listeners for camera dragging and tile interaction
