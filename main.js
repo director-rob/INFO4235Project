@@ -1,4 +1,3 @@
-// main.js - 3D Game with Three.js featuring car movement, falling objects, ghosts, and follower protection system
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
